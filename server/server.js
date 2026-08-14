@@ -69,8 +69,6 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests without origin
-      // Example: Postman / server-to-server
       if (!origin) {
         return callback(null, true);
       }
@@ -79,11 +77,9 @@ app.use(
         return callback(null, true);
       }
 
-      console.log("❌ CORS blocked:", origin);
+      console.log("CORS blocked:", origin);
 
-      return callback(
-        new Error(`Not allowed by CORS: ${origin}`)
-      );
+      return callback(null, false);
     },
 
     credentials: true,
@@ -101,8 +97,12 @@ app.use(
       "Content-Type",
       "Authorization",
     ],
+
+    optionsSuccessStatus: 204,
   })
 );
+
+ 
 
 // =====================================================
 // STRIPE WEBHOOK
@@ -334,16 +334,6 @@ app.use(
 //
 // ===============================
 
-const PORT =
-  process.env.PORT || 5000;
 
-app.listen(
-  PORT,
-  () => {
-    console.log(
-      `Server running on port ${PORT}`
-    );
-  }
-);
 
 export default app;
