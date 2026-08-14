@@ -38,9 +38,11 @@ import adminWithdrawalsRouter from "./routes/adminWithdrawals.js";
 
 import profileRoutes from "./routes/profileRoutes.js";
 
-// ⭐ STRIPE WEBHOOK
-import stripeWebhookRouter from "./routes/stripeWebhook.js";
+// ===============================
+// STRIPE WEBHOOK
+// ===============================
 
+import stripeWebhookRouter from "./routes/stripeWebhook.js";
 
 // ===============================
 // APP
@@ -48,13 +50,11 @@ import stripeWebhookRouter from "./routes/stripeWebhook.js";
 
 const app = express();
 
-
 // ===============================
 // DATABASE
 // ===============================
 
 connectDb();
-
 
 // ===============================
 // CORS
@@ -62,15 +62,15 @@ connectDb();
 
 const allowedOrigins = [
   "http://localhost:5173",
+  "https://impact-draw-client.vercel.app",
   process.env.CLIENT_URL,
 ].filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-
-      // Allow requests without Origin
-      // Example: Postman / Stripe / server-to-server
+      // Allow requests without origin
+      // Example: Postman / server-to-server
       if (!origin) {
         return callback(null, true);
       }
@@ -79,28 +79,41 @@ app.use(
         return callback(null, true);
       }
 
+      console.log("❌ CORS blocked:", origin);
+
       return callback(
         new Error(`Not allowed by CORS: ${origin}`)
       );
     },
 
     credentials: true,
+
+    methods: [
+      "GET",
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE",
+      "OPTIONS",
+    ],
+
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+    ],
   })
 );
 
-
 // =====================================================
-// ⭐ STRIPE WEBHOOK
+// STRIPE WEBHOOK
 // =====================================================
 //
 // IMPORTANT:
+// Stripe webhook MUST come before express.json()
+// because Stripe requires the RAW request body.
 //
-// This MUST come BEFORE express.json()
-//
-// Stripe webhook requires the RAW request body.
-// stripeWebhook.js itself uses:
-//
-// express.raw({ type: "application/json" })
+// Endpoint:
+// POST /api/stripe/webhook
 //
 // =====================================================
 
@@ -109,9 +122,8 @@ app.use(
   stripeWebhookRouter
 );
 
-
 // ===============================
-// GENERAL MIDDLEWARE
+// MIDDLEWARE
 // ===============================
 
 app.use(express.json());
@@ -124,9 +136,8 @@ app.use(
 
 app.use(cookieParser());
 
-
 // ===============================
-// PROFILE ROUTES
+// PROFILE
 // ===============================
 
 app.use(
@@ -134,23 +145,19 @@ app.use(
   profileRoutes
 );
 
-
 // ===============================
 // ROOT
 // ===============================
 
 app.get("/", (req, res) => {
-
-  return res.status(200).json({
+  return res.json({
     success: true,
     message: "ImpactDraw API Running",
   });
-
 });
 
-
 // ===============================
-// AUTH ROUTES
+// AUTH
 // ===============================
 
 app.use(
@@ -158,9 +165,8 @@ app.use(
   authRouter
 );
 
-
 // ===============================
-// USER ROUTES
+// USER
 // ===============================
 
 app.use(
@@ -168,9 +174,8 @@ app.use(
   userRouter
 );
 
-
 // ===============================
-// CHARITY ROUTES
+// CHARITIES
 // ===============================
 
 app.use(
@@ -178,15 +183,14 @@ app.use(
   charityRouter
 );
 
-
 // ===============================
 // USER DRAW ROUTES
 // ===============================
 //
-// GET  /api/draws/active
-// GET  /api/draws/latest
-// GET  /api/draws/history
-// POST /api/draws/enter
+// /api/draws/active
+// /api/draws/latest
+// /api/draws/history
+// /api/draws/enter
 //
 // ===============================
 
@@ -195,15 +199,8 @@ app.use(
   drawRouter
 );
 
-
 // ===============================
-// SUBSCRIPTION ROUTES
-// ===============================
-//
-// POST /api/subscriptions/create-checkout-session
-// GET  /api/subscriptions/verify
-// GET  /api/subscriptions/history
-//
+// SUBSCRIPTIONS
 // ===============================
 
 app.use(
@@ -211,9 +208,8 @@ app.use(
   subscriptionRouter
 );
 
-
 // ===============================
-// SCORE ROUTES
+// SCORES
 // ===============================
 
 app.use(
@@ -221,9 +217,8 @@ app.use(
   scoreRouter
 );
 
-
 // ===============================
-// WALLET ROUTES
+// WALLET
 // ===============================
 
 app.use(
@@ -231,9 +226,8 @@ app.use(
   walletRouter
 );
 
-
 // ===============================
-// WITHDRAWAL ROUTES
+// WITHDRAWALS
 // ===============================
 
 app.use(
@@ -241,16 +235,14 @@ app.use(
   withdrawalRouter
 );
 
-
 // ===============================
-// ADMIN ROUTES
+// ADMIN
 // ===============================
 
 app.use(
   "/api/admin",
   adminRouter
 );
-
 
 // ===============================
 // ADMIN USERS
@@ -261,14 +253,13 @@ app.use(
   adminUsersRouter
 );
 
-
 // ===============================
-// ADMIN DRAW ROUTES
+// ADMIN DRAWS
 // ===============================
 //
-// POST /api/admin/draws/simulate
-// POST /api/admin/draws/publish
-// POST /api/admin/draws/:drawId/calculate-winners
+// /api/admin/draws/simulate
+// /api/admin/draws/publish
+// /api/admin/draws/:drawId/calculate-winners
 //
 // ===============================
 
@@ -276,7 +267,6 @@ app.use(
   "/api/admin/draws",
   adminDrawRouter
 );
-
 
 // ===============================
 // ADMIN WINNERS
@@ -287,7 +277,6 @@ app.use(
   winnerRouter
 );
 
-
 // ===============================
 // ADMIN DASHBOARD
 // ===============================
@@ -296,7 +285,6 @@ app.use(
   "/api/admin/dashboard",
   adminDashboardRoutes
 );
-
 
 // ===============================
 // ADMIN WITHDRAWALS
@@ -307,46 +295,43 @@ app.use(
   adminWithdrawalsRouter
 );
 
-
-// ===============================
-// 404 HANDLER
-// ===============================
-
-app.use((req, res) => {
-
-  return res.status(404).json({
-    success: false,
-    message: "API route not found",
-    path: req.originalUrl,
-  });
-
-});
-
-
 // ===============================
 // ERROR HANDLER
 // ===============================
 
 app.use(
   (err, req, res, next) => {
-
     console.error(
       "SERVER ERROR:",
       err
     );
 
+    // CORS errors
+    if (
+      err.message &&
+      err.message.includes("Not allowed by CORS")
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: err.message,
+      });
+    }
+
     return res.status(500).json({
       success: false,
-      message:
-        err.message || "Server Error",
+      message: "Server Error",
     });
-
   }
 );
 
-
 // ===============================
 // SERVER
+// ===============================
+//
+// Local development ke liye listen.
+// Vercel serverless me server/api/index.js
+// app ko export karta hai.
+//
 // ===============================
 
 const PORT =
@@ -355,10 +340,10 @@ const PORT =
 app.listen(
   PORT,
   () => {
-
     console.log(
-      `🚀 ImpactDraw server running on port ${PORT}`
+      `Server running on port ${PORT}`
     );
-
   }
 );
+
+export default app;
