@@ -73,7 +73,10 @@ app.use(
         return callback(null, true);
       }
 
-      if (allowedOrigins.includes(origin)) {
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.endsWith(".vercel.app")
+      ) {
         return callback(null, true);
       }
 
@@ -81,9 +84,7 @@ app.use(
 
       return callback(null, false);
     },
-
     credentials: true,
-
     methods: [
       "GET",
       "POST",
@@ -92,15 +93,14 @@ app.use(
       "DELETE",
       "OPTIONS",
     ],
-
     allowedHeaders: [
       "Content-Type",
       "Authorization",
     ],
-
-    optionsSuccessStatus: 204,
   })
 );
+
+ 
 
  
 
