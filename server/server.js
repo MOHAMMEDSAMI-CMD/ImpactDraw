@@ -41,17 +41,20 @@ import profileRoutes from "./routes/profileRoutes.js";
 // ⭐ STRIPE WEBHOOK
 import stripeWebhookRouter from "./routes/stripeWebhook.js";
 
+
 // ===============================
 // APP
 // ===============================
 
 const app = express();
 
+
 // ===============================
 // DATABASE
 // ===============================
 
 connectDb();
+
 
 // ===============================
 // CORS
@@ -65,8 +68,9 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests without origin
-      // such as Postman/server-to-server
+
+      // Allow requests without Origin
+      // Example: Postman / Stripe / server-to-server
       if (!origin) {
         return callback(null, true);
       }
@@ -76,7 +80,7 @@ app.use(
       }
 
       return callback(
-        new Error("Not allowed by CORS")
+        new Error(`Not allowed by CORS: ${origin}`)
       );
     },
 
@@ -84,12 +88,20 @@ app.use(
   })
 );
 
+
 // =====================================================
 // ⭐ STRIPE WEBHOOK
 // =====================================================
+//
 // IMPORTANT:
-// This MUST come before express.json()
-// because Stripe requires the RAW request body.
+//
+// This MUST come BEFORE express.json()
+//
+// Stripe webhook requires the RAW request body.
+// stripeWebhook.js itself uses:
+//
+// express.raw({ type: "application/json" })
+//
 // =====================================================
 
 app.use(
@@ -97,8 +109,9 @@ app.use(
   stripeWebhookRouter
 );
 
+
 // ===============================
-// MIDDLEWARE
+// GENERAL MIDDLEWARE
 // ===============================
 
 app.use(express.json());
@@ -111,8 +124,9 @@ app.use(
 
 app.use(cookieParser());
 
+
 // ===============================
-// PROFILE
+// PROFILE ROUTES
 // ===============================
 
 app.use(
@@ -120,19 +134,23 @@ app.use(
   profileRoutes
 );
 
+
 // ===============================
 // ROOT
 // ===============================
 
 app.get("/", (req, res) => {
-  return res.json({
+
+  return res.status(200).json({
     success: true,
     message: "ImpactDraw API Running",
   });
+
 });
 
+
 // ===============================
-// USER ROUTES
+// AUTH ROUTES
 // ===============================
 
 app.use(
@@ -140,13 +158,19 @@ app.use(
   authRouter
 );
 
+
+// ===============================
+// USER ROUTES
+// ===============================
+
 app.use(
   "/api/user",
   userRouter
 );
 
+
 // ===============================
-// CHARITIES
+// CHARITY ROUTES
 // ===============================
 
 app.use(
@@ -154,22 +178,32 @@ app.use(
   charityRouter
 );
 
+
 // ===============================
 // USER DRAW ROUTES
 // ===============================
-
-// /api/draws/active
-// /api/draws/latest
-// /api/draws/history
-// /api/draws/enter
+//
+// GET  /api/draws/active
+// GET  /api/draws/latest
+// GET  /api/draws/history
+// POST /api/draws/enter
+//
+// ===============================
 
 app.use(
   "/api/draws",
   drawRouter
 );
 
+
 // ===============================
-// SUBSCRIPTION
+// SUBSCRIPTION ROUTES
+// ===============================
+//
+// POST /api/subscriptions/create-checkout-session
+// GET  /api/subscriptions/verify
+// GET  /api/subscriptions/history
+//
 // ===============================
 
 app.use(
@@ -177,8 +211,9 @@ app.use(
   subscriptionRouter
 );
 
+
 // ===============================
-// SCORES
+// SCORE ROUTES
 // ===============================
 
 app.use(
@@ -186,8 +221,9 @@ app.use(
   scoreRouter
 );
 
+
 // ===============================
-// WALLET
+// WALLET ROUTES
 // ===============================
 
 app.use(
@@ -195,14 +231,16 @@ app.use(
   walletRouter
 );
 
+
 // ===============================
-// WITHDRAWAL
+// WITHDRAWAL ROUTES
 // ===============================
 
 app.use(
   "/api/withdrawals",
   withdrawalRouter
 );
+
 
 // ===============================
 // ADMIN ROUTES
@@ -213,23 +251,32 @@ app.use(
   adminRouter
 );
 
+
+// ===============================
+// ADMIN USERS
+// ===============================
+
 app.use(
   "/api/admin/users",
   adminUsersRouter
 );
 
-// ===============================
-// ADMIN DRAW
-// ===============================
 
-// /api/admin/draws/simulate
-// /api/admin/draws/publish
-// /api/admin/draws/:drawId/calculate-winners
+// ===============================
+// ADMIN DRAW ROUTES
+// ===============================
+//
+// POST /api/admin/draws/simulate
+// POST /api/admin/draws/publish
+// POST /api/admin/draws/:drawId/calculate-winners
+//
+// ===============================
 
 app.use(
   "/api/admin/draws",
   adminDrawRouter
 );
+
 
 // ===============================
 // ADMIN WINNERS
@@ -240,6 +287,7 @@ app.use(
   winnerRouter
 );
 
+
 // ===============================
 // ADMIN DASHBOARD
 // ===============================
@@ -248,6 +296,7 @@ app.use(
   "/api/admin/dashboard",
   adminDashboardRoutes
 );
+
 
 // ===============================
 // ADMIN WITHDRAWALS
@@ -258,23 +307,43 @@ app.use(
   adminWithdrawalsRouter
 );
 
+
+// ===============================
+// 404 HANDLER
+// ===============================
+
+app.use((req, res) => {
+
+  return res.status(404).json({
+    success: false,
+    message: "API route not found",
+    path: req.originalUrl,
+  });
+
+});
+
+
 // ===============================
 // ERROR HANDLER
 // ===============================
 
 app.use(
   (err, req, res, next) => {
+
     console.error(
       "SERVER ERROR:",
       err
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Server Error",
+      message:
+        err.message || "Server Error",
     });
+
   }
 );
+
 
 // ===============================
 // SERVER
@@ -286,8 +355,10 @@ const PORT =
 app.listen(
   PORT,
   () => {
+
     console.log(
-      `Server running on port ${PORT}`
+      `🚀 ImpactDraw server running on port ${PORT}`
     );
+
   }
 );
