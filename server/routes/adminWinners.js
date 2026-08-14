@@ -4,6 +4,8 @@ import mongoose from "mongoose";
 
 import Winner from "../models/Winner.js";
 import User from "../models/User.js";
+import Wallet from "../models/Wallet.js";
+import Transaction from "../models/Transaction.js";
 
 import {
   requireAuth,
@@ -34,17 +36,14 @@ router.get(
         )
         .sort({ createdAt: -1 });
 
-      res.json({
+      return res.json({
         success: true,
         winners,
       });
     } catch (error) {
-      console.error(
-        "Get winners error:",
-        error
-      );
+      console.error("GET WINNERS ERROR:", error);
 
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: "Failed to load winners",
       });
@@ -63,27 +62,24 @@ router.get(
   requireAdmin,
   async (req, res) => {
     try {
-      if (
-        !mongoose.Types.ObjectId.isValid(
-          req.params.id
-        )
-      ) {
+      const { id } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
         return res.status(400).json({
           success: false,
           message: "Invalid winner ID",
         });
       }
 
-      const winner =
-        await Winner.findById(req.params.id)
-          .populate(
-            "user",
-            "name email totalWins totalPrizeMoney"
-          )
-          .populate(
-            "draw",
-            "month year numbers status publishedAt prizePool jackpot"
-          );
+      const winner = await Winner.findById(id)
+        .populate(
+          "user",
+          "name email totalWins totalPrizeMoney"
+        )
+        .populate(
+          "draw",
+          "month year numbers status publishedAt prizePool jackpot"
+        );
 
       if (!winner) {
         return res.status(404).json({
@@ -92,17 +88,14 @@ router.get(
         });
       }
 
-      res.json({
+      return res.json({
         success: true,
         winner,
       });
     } catch (error) {
-      console.error(
-        "Get winner error:",
-        error
-      );
+      console.error("GET WINNER ERROR:", error);
 
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: "Failed to load winner",
       });
@@ -111,7 +104,193 @@ router.get(
 );
 
 // =====================================================
-// UPDATE VERIFICATION STATUS
+// APPROVE WINNER
+// PATCH /api/admin/winners/:id/approve
+// =====================================================
+
+router.patch(
+  "/:id/approve",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid winner ID",
+        });
+      }
+
+      const winner = await Winner.findById(id);
+
+      if (!winner) {
+        return res.status(404).json({
+          success: false,
+          message: "Winner not found",
+        });
+      }
+
+      if (winner.verificationStatus === "approved") {
+        return res.status(400).json({
+          success: false,
+          message: "Winner is already approved",
+        });
+      }
+
+      const user = await User.findById(winner.user);
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "Winner user not found",
+        });
+      }
+
+      // Update user statistics only once
+      user.totalWins = (user.totalWins || 0) + 1;
+
+      user.totalPrizeMoney =
+        (user.totalPrizeMoney || 0) +
+        Number(winner.prize || 0);
+
+      await user.save();
+
+      winner.verificationStatus = "approved";
+      winner.verifiedAt = new Date();
+
+      if (!winner.payoutStatus) {
+        winner.payoutStatus = "pending";
+      }
+
+      await winner.save();
+
+      const updatedWinner = await Winner.findById(id)
+        .populate(
+          "user",
+          "name email totalWins totalPrizeMoney"
+        )
+        .populate(
+          "draw",
+          "month year numbers status publishedAt prizePool jackpot"
+        );
+
+      return res.json({
+        success: true,
+        message: "Winner approved successfully",
+        winner: updatedWinner,
+      });
+    } catch (error) {
+      console.error("APPROVE WINNER ERROR:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Failed to approve winner",
+      });
+    }
+  }
+);
+
+// =====================================================
+// REJECT WINNER
+// PATCH /api/admin/winners/:id/reject
+// =====================================================
+
+router.patch(
+  "/:id/reject",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid winner ID",
+        });
+      }
+
+      const winner = await Winner.findById(id);
+
+      if (!winner) {
+        return res.status(404).json({
+          success: false,
+          message: "Winner not found",
+        });
+      }
+
+      // Paid winner cannot be rejected
+      if (winner.payoutStatus === "paid") {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Paid winner cannot be rejected",
+        });
+      }
+
+      const user = await User.findById(winner.user);
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "Winner user not found",
+        });
+      }
+
+      // Reverse statistics only if previously approved
+      if (winner.verificationStatus === "approved") {
+        user.totalWins = Math.max(
+          0,
+          (user.totalWins || 0) - 1
+        );
+
+        user.totalPrizeMoney = Math.max(
+          0,
+          (user.totalPrizeMoney || 0) -
+            Number(winner.prize || 0)
+        );
+
+        await user.save();
+      }
+
+      winner.verificationStatus = "rejected";
+      winner.verifiedAt = null;
+
+      winner.payoutStatus = "pending";
+      winner.paidAt = null;
+
+      await winner.save();
+
+      const updatedWinner = await Winner.findById(id)
+        .populate(
+          "user",
+          "name email totalWins totalPrizeMoney"
+        )
+        .populate(
+          "draw",
+          "month year numbers status publishedAt prizePool jackpot"
+        );
+
+      return res.json({
+        success: true,
+        message: "Winner rejected successfully",
+        winner: updatedWinner,
+      });
+    } catch (error) {
+      console.error("REJECT WINNER ERROR:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Failed to reject winner",
+      });
+    }
+  }
+);
+
+// =====================================================
+// UPDATE VERIFICATION
 // PATCH /api/admin/winners/:id/verification
 // =====================================================
 
@@ -121,29 +300,19 @@ router.patch(
   requireAdmin,
   async (req, res) => {
     try {
+      const { id } = req.params;
+
       const {
         verificationStatus,
         proofUrl,
       } = req.body;
 
-      // =================================================
-      // VALIDATE ID
-      // =================================================
-
-      if (
-        !mongoose.Types.ObjectId.isValid(
-          req.params.id
-        )
-      ) {
+      if (!mongoose.Types.ObjectId.isValid(id)) {
         return res.status(400).json({
           success: false,
           message: "Invalid winner ID",
         });
       }
-
-      // =================================================
-      // VALIDATE STATUS
-      // =================================================
 
       const validStatuses = [
         "pending",
@@ -151,11 +320,7 @@ router.patch(
         "rejected",
       ];
 
-      if (
-        !validStatuses.includes(
-          verificationStatus
-        )
-      ) {
+      if (!validStatuses.includes(verificationStatus)) {
         return res.status(400).json({
           success: false,
           message:
@@ -163,12 +328,7 @@ router.patch(
         });
       }
 
-      // =================================================
-      // FIND WINNER
-      // =================================================
-
-      const winner =
-        await Winner.findById(req.params.id);
+      const winner = await Winner.findById(id);
 
       if (!winner) {
         return res.status(404).json({
@@ -177,18 +337,24 @@ router.patch(
         });
       }
 
-      // =================================================
-      // FIND USER
-      // =================================================
+      // Paid winner cannot be moved back
+      if (
+        winner.payoutStatus === "paid" &&
+        verificationStatus !== "approved"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Paid winner verification cannot be changed",
+        });
+      }
 
-      const user =
-        await User.findById(winner.user);
+      const user = await User.findById(winner.user);
 
       if (!user) {
         return res.status(404).json({
           success: false,
-          message:
-            "Winner's user not found",
+          message: "Winner user not found",
         });
       }
 
@@ -199,39 +365,7 @@ router.patch(
         verificationStatus;
 
       // =================================================
-      // SAME STATUS
-      // =================================================
-
-      if (oldStatus === newStatus) {
-        if (proofUrl !== undefined) {
-          winner.proofUrl = proofUrl;
-          await winner.save();
-        }
-
-        const updatedWinner =
-          await Winner.findById(
-            winner._id
-          )
-            .populate(
-              "user",
-              "name email totalWins totalPrizeMoney"
-            )
-            .populate(
-              "draw",
-              "month year numbers status publishedAt prizePool jackpot"
-            );
-
-        return res.json({
-          success: true,
-          message:
-            "Winner verification already has this status",
-          winner: updatedWinner,
-        });
-      }
-
-      // =================================================
-      // APPROVE
-      // pending/rejected -> approved
+      // PENDING/REJECTED -> APPROVED
       // =================================================
 
       if (
@@ -247,133 +381,95 @@ router.patch(
 
         await user.save();
 
-        winner.verifiedAt =
-          new Date();
+        winner.verifiedAt = new Date();
       }
 
       // =================================================
       // APPROVED -> REJECTED
       // =================================================
 
-      else if (
+      if (
         oldStatus === "approved" &&
         newStatus === "rejected"
       ) {
-        // If already paid, do not reverse
-        // user's winning statistics automatically.
-        if (
-          winner.payoutStatus !== "paid"
-        ) {
-          user.totalWins = Math.max(
+        user.totalWins = Math.max(
+          0,
+          (user.totalWins || 0) - 1
+        );
+
+        user.totalPrizeMoney =
+          Math.max(
             0,
-            (user.totalWins || 0) - 1
+            (user.totalPrizeMoney || 0) -
+              Number(winner.prize || 0)
           );
 
-          user.totalPrizeMoney =
-            Math.max(
-              0,
-              (user.totalPrizeMoney || 0) -
-                Number(winner.prize || 0)
-            );
-
-          await user.save();
-        }
+        await user.save();
 
         winner.verifiedAt = null;
+        winner.payoutStatus = "pending";
+        winner.paidAt = null;
       }
 
       // =================================================
       // APPROVED -> PENDING
       // =================================================
 
-      else if (
+      if (
         oldStatus === "approved" &&
         newStatus === "pending"
       ) {
-        // Do not reverse already paid prize
-        // automatically.
-        if (
-          winner.payoutStatus !== "paid"
-        ) {
-          user.totalWins = Math.max(
+        user.totalWins = Math.max(
+          0,
+          (user.totalWins || 0) - 1
+        );
+
+        user.totalPrizeMoney =
+          Math.max(
             0,
-            (user.totalWins || 0) - 1
+            (user.totalPrizeMoney || 0) -
+              Number(winner.prize || 0)
           );
 
-          user.totalPrizeMoney =
-            Math.max(
-              0,
-              (user.totalPrizeMoney || 0) -
-                Number(winner.prize || 0)
-            );
-
-          await user.save();
-
-          winner.payoutStatus =
-            "pending";
-          winner.paidAt = null;
-        }
+        await user.save();
 
         winner.verifiedAt = null;
+        winner.payoutStatus = "pending";
+        winner.paidAt = null;
       }
 
       // =================================================
-      // REJECTED -> PENDING
+      // OTHER STATUS
       // =================================================
 
-      else if (
-        oldStatus === "rejected" &&
-        newStatus === "pending"
-      ) {
+      if (newStatus === "rejected") {
         winner.verifiedAt = null;
       }
 
-      // =================================================
-      // PENDING -> REJECTED
-      // =================================================
-
-      else if (
-        oldStatus === "pending" &&
-        newStatus === "rejected"
-      ) {
+      if (newStatus === "pending") {
         winner.verifiedAt = null;
       }
-
-      // =================================================
-      // UPDATE PROOF
-      // =================================================
 
       if (proofUrl !== undefined) {
         winner.proofUrl = proofUrl;
       }
-
-      // =================================================
-      // UPDATE VERIFICATION STATUS
-      // =================================================
 
       winner.verificationStatus =
         newStatus;
 
       await winner.save();
 
-      // =================================================
-      // GET UPDATED WINNER
-      // =================================================
-
-      const updatedWinner =
-        await Winner.findById(
-          winner._id
+      const updatedWinner = await Winner.findById(id)
+        .populate(
+          "user",
+          "name email totalWins totalPrizeMoney"
         )
-          .populate(
-            "user",
-            "name email totalWins totalPrizeMoney"
-          )
-          .populate(
-            "draw",
-            "month year numbers status publishedAt prizePool jackpot"
-          );
+        .populate(
+          "draw",
+          "month year numbers status publishedAt prizePool jackpot"
+        );
 
-      res.json({
+      return res.json({
         success: true,
         message:
           `Winner verification updated to ${newStatus}`,
@@ -381,11 +477,11 @@ router.patch(
       });
     } catch (error) {
       console.error(
-        "Verification update error:",
+        "VERIFICATION UPDATE ERROR:",
         error
       );
 
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message:
           "Failed to update verification",
@@ -396,38 +492,25 @@ router.patch(
 
 // =====================================================
 // MARK WINNER AS PAID
-// PATCH /api/admin/winners/:id/payout
+// PATCH /api/admin/winners/:id/pay
 // =====================================================
 
 router.patch(
-  "/:id/payout",
+  "/:id/pay",
   requireAuth,
   requireAdmin,
   async (req, res) => {
     try {
-      // =================================================
-      // VALIDATE ID
-      // =================================================
+      const { id } = req.params;
 
-      if (
-        !mongoose.Types.ObjectId.isValid(
-          req.params.id
-        )
-      ) {
+      if (!mongoose.Types.ObjectId.isValid(id)) {
         return res.status(400).json({
           success: false,
           message: "Invalid winner ID",
         });
       }
 
-      // =================================================
-      // FIND WINNER
-      // =================================================
-
-      const winner =
-        await Winner.findById(
-          req.params.id
-        );
+      const winner = await Winner.findById(id);
 
       if (!winner) {
         return res.status(404).json({
@@ -441,8 +524,7 @@ router.patch(
       // =================================================
 
       if (
-        winner.verificationStatus !==
-        "approved"
+        winner.verificationStatus !== "approved"
       ) {
         return res.status(400).json({
           success: false,
@@ -452,12 +534,10 @@ router.patch(
       }
 
       // =================================================
-      // ALREADY PAID
+      // PREVENT DUPLICATE PAYOUT
       // =================================================
 
-      if (
-        winner.payoutStatus === "paid"
-      ) {
+      if (winner.payoutStatus === "paid") {
         return res.status(400).json({
           success: false,
           message:
@@ -465,8 +545,81 @@ router.patch(
         });
       }
 
+      const prizeAmount =
+        Number(winner.prize || 0);
+
+      if (prizeAmount <= 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Invalid prize amount",
+        });
+      }
+
       // =================================================
-      // MARK AS PAID
+      // FIND / CREATE WALLET
+      // =================================================
+
+      let wallet = await Wallet.findOne({
+        user: winner.user,
+      });
+
+      if (!wallet) {
+        wallet = await Wallet.create({
+          user: winner.user,
+          balance: 0,
+        });
+      }
+
+      // =================================================
+      // EXTRA DUPLICATE PROTECTION
+      // =================================================
+
+      const existingTransaction =
+        await Transaction.findOne({
+          user: winner.user,
+          reference: winner._id,
+          type: "credit",
+          description: "Prize money received",
+        });
+
+      if (existingTransaction) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Prize transaction already exists",
+        });
+      }
+
+      // =================================================
+      // CREDIT WALLET
+      // =================================================
+
+      wallet.balance += prizeAmount;
+
+      await wallet.save();
+
+      // =================================================
+      // CREATE TRANSACTION
+      // =================================================
+
+      await Transaction.create({
+        user: winner.user,
+
+        type: "credit",
+
+        amount: prizeAmount,
+
+        description:
+          "Prize money received",
+
+        status: "completed",
+
+        reference: winner._id,
+      });
+
+      // =================================================
+      // UPDATE WINNER
       // =================================================
 
       winner.payoutStatus = "paid";
@@ -475,13 +628,11 @@ router.patch(
       await winner.save();
 
       // =================================================
-      // GET UPDATED WINNER
+      // RESPONSE
       // =================================================
 
       const updatedWinner =
-        await Winner.findById(
-          winner._id
-        )
+        await Winner.findById(id)
           .populate(
             "user",
             "name email totalWins totalPrizeMoney"
@@ -491,19 +642,24 @@ router.patch(
             "month year numbers status publishedAt prizePool jackpot"
           );
 
-      res.json({
+      return res.json({
         success: true,
+
         message:
-          "Prize marked as paid",
+          "Prize marked as paid and credited to wallet",
+
         winner: updatedWinner,
+
+        walletBalance:
+          wallet.balance,
       });
     } catch (error) {
       console.error(
-        "Payout update error:",
+        "PAYOUT UPDATE ERROR:",
         error
       );
 
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message:
           "Failed to update payout",

@@ -2,7 +2,7 @@ import express from "express";
 import Stripe from "stripe";
 import User from "../models/User.js";
 import { requireAuth } from "../middleware/auth.js";
-
+import SubscriptionPayment from "../models/SubscriptionPayment.js";
 const router = express.Router();
 
 // Check environment variable
@@ -197,6 +197,62 @@ router.get(
       user.subscriptionStartDate = startDate;
       user.subscriptionRenewalDate = renewalDate;
 
+
+      // ==========================================
+// SAVE SUBSCRIPTION PAYMENT HISTORY
+// ==========================================
+
+const existingPayment =
+  await SubscriptionPayment.findOne({
+    stripeSessionId: session.id,
+  });
+
+if (!existingPayment) {
+  // Get actual amount from Stripe
+  const lineItems =
+    await stripe.checkout.sessions.listLineItems(
+      session.id,
+      {
+        limit: 1,
+      }
+    );
+
+  const amount =
+    lineItems.data?.[0]?.price?.unit_amount || 0;
+
+  await SubscriptionPayment.create({
+    user: user._id,
+
+    plan,
+
+    amount: amount / 100,
+
+    currency:
+      session.currency || "inr",
+
+    status: "paid",
+
+    stripeSessionId:
+      session.id,
+
+    stripePaymentIntentId:
+      session.payment_intent || null,
+
+    stripeSubscriptionId:
+      session.subscription || null,
+
+    paidAt: new Date(),
+  });
+
+  console.log(
+    "✅ Subscription payment history saved"
+  );
+} else {
+  console.log(
+    "ℹ️ Subscription payment already exists"
+  );
+}
+
       await user.save();
 
       return res.json({
@@ -248,6 +304,44 @@ router.post(
       message:
         "Direct activation is disabled. Please complete Stripe payment.",
     });
+  }
+);
+
+// ==========================================
+// GET SUBSCRIPTION PAYMENT HISTORY
+// GET /api/subscriptions/history
+// ==========================================
+
+router.get(
+  "/history",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const payments =
+        await SubscriptionPayment.find({
+          user: req.user.id,
+        })
+          .sort({
+            createdAt: -1,
+          })
+          .lean();
+
+      return res.status(200).json({
+        success: true,
+        payments,
+      });
+    } catch (error) {
+      console.error(
+        "GET SUBSCRIPTION HISTORY ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "Failed to load subscription payment history",
+      });
+    }
   }
 );
 

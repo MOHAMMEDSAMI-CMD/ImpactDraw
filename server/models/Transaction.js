@@ -33,7 +33,12 @@ const transactionSchema = new mongoose.Schema(
 
     reference: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Winner",
+      default: null,
+    },
+
+    referenceModel: {
+      type: String,
+      enum: ["Winner", "Withdrawal", null],
       default: null,
     },
   },

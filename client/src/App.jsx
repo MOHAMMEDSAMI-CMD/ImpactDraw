@@ -23,6 +23,7 @@ import Pricing from "./pages/Pricing";
 import HowItWorks from "./pages/HowItWorks";
 import NotFound from "./pages/NotFound";
 import Wallet from "./pages/Wallet";
+import PaymentHistory from "./pages/PaymentHistory";
 
 // Draw pages
 import DrawResults from "./pages/DrawResults";
@@ -30,6 +31,10 @@ import DrawHistory from "./pages/DrawHistory";
 import LatestDraw from "./pages/LatestDraw";
 import DrawEntry from "./pages/DrawEntry";
 import PaymentSuccess from "./pages/PaymentSuccess";
+import EnterDraw from "./pages/EnterDraw";
+import Withdrawal from "./pages/Withdrawal";
+
+
 
 // User pages
 import Profile from "./pages/Profile.jsx";
@@ -42,6 +47,7 @@ import AdminCharities from "./pages/admin/AdminCharities";
 import AdminDraws from "./pages/admin/AdminDraws";
 import AdminWinners from "./pages/admin/AdminWinners";
 import AdminReports from "./pages/admin/AdminReports";
+import AdminWithdrawals from "./pages/admin/AdminWithdrawals";
 
 import "./index.css";
 
@@ -114,9 +120,16 @@ const App = () => {
           />
 
           <Route
-  path="/wallet"
-  element={<Wallet />}
-/>
+            path="/withdrawal"
+            element={<Withdrawal />}
+          />
+
+          
+
+          <Route
+            path="/wallet"
+            element={<Wallet />}
+          />
 
           <Route
             path="/payment-success"
@@ -152,6 +165,11 @@ const App = () => {
             />
 
           </Route>
+
+          <Route
+  path="/payment-history"
+  element={<PaymentHistory />}
+/>
 
 
           {/* =====================================
@@ -205,6 +223,11 @@ const App = () => {
             />
 
 
+            <Route
+              path="/admin/withdrawals"
+              element={<AdminWithdrawals />}
+            />
+
             {/* Admin Reports */}
 
             <Route
@@ -213,6 +236,8 @@ const App = () => {
             />
 
           </Route>
+
+
 
 
           {/* =====================================

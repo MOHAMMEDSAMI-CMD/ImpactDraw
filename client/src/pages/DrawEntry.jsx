@@ -16,10 +16,27 @@ const DrawEntry = () => {
 
   const [message, setMessage] = useState("");
 
+  // ==============================
+  // ALL NUMBERS 1 - 45
+  // ==============================
+
   const allNumbers = Array.from(
     { length: 45 },
     (_, i) => i + 1
   );
+
+  // ==============================
+  // CHECK WHETHER ENTRY IS OPEN
+  // ==============================
+
+  const isEntryOpen = (draw) => {
+    if (!draw) return false;
+
+    return (
+      draw.status === "open" ||
+      draw.status === "published"
+    );
+  };
 
   // ==============================
   // GET ACTIVE DRAW
@@ -28,13 +45,17 @@ const DrawEntry = () => {
   const getActiveDraw = async () => {
     try {
       setLoading(true);
+      setMessage("");
 
-      // Get active/published draw
+      // ============================
+      // GET ACTIVE / PUBLISHED DRAW
+      // ============================
+
       const { data } = await api.get("/draws/active");
 
       console.log("ACTIVE DRAW:", data);
 
-      if (data.success) {
+      if (data.success && data.draw) {
         setActiveDraw(data.draw);
       } else {
         setActiveDraw(null);
@@ -59,9 +80,15 @@ const DrawEntry = () => {
             entryResponse.data.entered
           );
 
-          // If already entered, show saved numbers
+          // ============================
+          // LOAD SAVED NUMBERS
+          // ============================
+
           if (
-            entryResponse.data.entry?.numbers
+            entryResponse.data.entry &&
+            Array.isArray(
+              entryResponse.data.entry.numbers
+            )
           ) {
             setNumbers(
               entryResponse.data.entry.numbers
@@ -105,12 +132,33 @@ const DrawEntry = () => {
   // ==============================
 
   const toggleNumber = (num) => {
-    // Already entered -> don't allow changes
+    // Already entered
     if (alreadyEntered) {
       return;
     }
 
-    // Remove number
+    // Draw not available
+    if (!activeDraw) {
+      setMessage(
+        "No active draw available."
+      );
+
+      return;
+    }
+
+    // Draw not open
+    if (!isEntryOpen(activeDraw)) {
+      setMessage(
+        "This draw is not open for entries."
+      );
+
+      return;
+    }
+
+    // ============================
+    // REMOVE NUMBER
+    // ============================
+
     if (numbers.includes(num)) {
       setNumbers(
         numbers.filter(
@@ -123,7 +171,10 @@ const DrawEntry = () => {
       return;
     }
 
-    // Maximum 5 numbers
+    // ============================
+    // MAXIMUM 5 NUMBERS
+    // ============================
+
     if (numbers.length >= 5) {
       setMessage(
         "You can select only 5 numbers."
@@ -132,7 +183,10 @@ const DrawEntry = () => {
       return;
     }
 
-    // Add number
+    // ============================
+    // ADD NUMBER
+    // ============================
+
     setNumbers([
       ...numbers,
       num,
@@ -146,7 +200,10 @@ const DrawEntry = () => {
   // ==============================
 
   const submitEntry = async () => {
-    // Already entered
+    // ============================
+    // ALREADY ENTERED
+    // ============================
+
     if (alreadyEntered) {
       setMessage(
         "You have already entered this draw."
@@ -155,16 +212,10 @@ const DrawEntry = () => {
       return;
     }
 
-    // Need exactly 5
-    if (numbers.length !== 5) {
-      setMessage(
-        "Select exactly 5 numbers."
-      );
+    // ============================
+    // NO ACTIVE DRAW
+    // ============================
 
-      return;
-    }
-
-    // No draw
     if (!activeDraw) {
       setMessage(
         "No active draw available."
@@ -173,9 +224,37 @@ const DrawEntry = () => {
       return;
     }
 
+    // ============================
+    // CHECK DRAW STATUS
+    // ============================
+
+    if (!isEntryOpen(activeDraw)) {
+      setMessage(
+        "This draw is not open for entries."
+      );
+
+      return;
+    }
+
+    // ============================
+    // EXACTLY 5 NUMBERS
+    // ============================
+
+    if (numbers.length !== 5) {
+      setMessage(
+        "Select exactly 5 numbers."
+      );
+
+      return;
+    }
+
     try {
       setSubmitting(true);
       setMessage("");
+
+      // ============================
+      // SUBMIT ENTRY
+      // ============================
 
       const { data } = await api.post(
         "/draws/enter",
@@ -195,7 +274,6 @@ const DrawEntry = () => {
             "Draw entry successful."
         );
 
-        // User has now entered
         setAlreadyEntered(true);
       } else {
         setMessage(
@@ -240,6 +318,13 @@ const DrawEntry = () => {
   }
 
   // ==============================
+  // ENTRY STATUS
+  // ==============================
+
+  const entryOpen =
+    isEntryOpen(activeDraw);
+
+  // ==============================
   // PAGE
   // ==============================
 
@@ -281,13 +366,37 @@ const DrawEntry = () => {
                 </h2>
               </div>
 
-              <span className="px-4 py-2 rounded-full bg-green-100 text-green-700 text-sm font-bold">
-                Published
+              {/* ==========================
+                  STATUS
+              ========================== */}
+
+              <span
+                className={`px-4 py-2 rounded-full text-sm font-bold ${
+                  entryOpen
+                    ? "bg-green-100 text-green-700"
+                    : activeDraw.status ===
+                      "simulated"
+                    ? "bg-yellow-100 text-yellow-700"
+                    : "bg-blue-100 text-blue-700"
+                }`}
+              >
+                {entryOpen
+                  ? "Open for Entries"
+                  : activeDraw.status ===
+                    "simulated"
+                  ? "Simulated"
+                  : "Published"}
               </span>
 
             </div>
 
+            {/* ==========================
+                PRIZE INFORMATION
+            ========================== */}
+
             <div className="grid sm:grid-cols-2 gap-4 mt-6">
+
+              {/* PRIZE POOL */}
 
               <div className="bg-[#f5f7f2] rounded-xl p-4">
 
@@ -303,6 +412,8 @@ const DrawEntry = () => {
                 </p>
 
               </div>
+
+              {/* JACKPOT */}
 
               <div className="bg-[#f5f7f2] rounded-xl p-4">
 
@@ -355,6 +466,8 @@ const DrawEntry = () => {
               </p>
             </div>
 
+            {/* SELECTED COUNT */}
+
             <div className="text-sm font-bold">
               Selected{" "}
               <span className="text-[#d89b28]">
@@ -364,12 +477,13 @@ const DrawEntry = () => {
 
           </div>
 
-          {/* NUMBER GRID */}
+          {/* ==========================
+              NUMBER GRID
+          ========================== */}
 
           <div className="grid grid-cols-5 sm:grid-cols-7 md:grid-cols-9 gap-4 mt-7">
 
             {allNumbers.map((num) => {
-
               const isSelected =
                 numbers.includes(num);
 
@@ -382,7 +496,8 @@ const DrawEntry = () => {
                   }
                   disabled={
                     alreadyEntered ||
-                    submitting
+                    submitting ||
+                    !entryOpen
                   }
                   className={`
                     h-12
@@ -400,7 +515,8 @@ const DrawEntry = () => {
                     }
 
                     ${
-                      alreadyEntered
+                      alreadyEntered ||
+                      !entryOpen
                         ? "cursor-not-allowed opacity-80"
                         : ""
                     }
@@ -413,9 +529,9 @@ const DrawEntry = () => {
 
           </div>
 
-          {/* ========================
+          {/* ==========================
               SELECTED NUMBERS
-          ======================== */}
+          ========================== */}
 
           <div className="mt-8 p-4 rounded-xl bg-[#f5f7f2]">
 
@@ -431,9 +547,31 @@ const DrawEntry = () => {
 
           </div>
 
-          {/* ========================
+          {/* ==========================
+              DRAW CLOSED MESSAGE
+          ========================== */}
+
+          {activeDraw &&
+            !entryOpen &&
+            !alreadyEntered && (
+              <div className="mt-5 p-4 rounded-xl bg-red-50 border border-red-200">
+
+                <p className="font-bold text-red-800">
+                  This draw is not open for
+                  entries.
+                </p>
+
+                <p className="text-sm text-red-700 mt-1">
+                  Please wait for the next
+                  available draw.
+                </p>
+
+              </div>
+            )}
+
+          {/* ==========================
               ALREADY ENTERED
-          ======================== */}
+          ========================== */}
 
           {alreadyEntered && (
             <div className="mt-5 p-4 rounded-xl bg-green-50 border border-green-200">
@@ -444,18 +582,18 @@ const DrawEntry = () => {
               </p>
 
               <p className="text-sm text-green-700 mt-1">
-                Your selected numbers are locked
-                for this draw.
+                Your selected numbers are
+                locked for this draw.
               </p>
 
             </div>
           )}
 
-          {/* ========================
+          {/* ==========================
               MESSAGE
-          ======================== */}
+          ========================== */}
 
-          {message && (
+          {message && !alreadyEntered && (
             <div
               className={`
                 mt-5
@@ -465,7 +603,9 @@ const DrawEntry = () => {
                 font-semibold
 
                 ${
-                  alreadyEntered
+                  message.toLowerCase().includes(
+                    "success"
+                  )
                     ? "bg-green-50 text-green-700"
                     : "bg-gray-50 text-gray-700"
                 }
@@ -475,9 +615,9 @@ const DrawEntry = () => {
             </div>
           )}
 
-          {/* ========================
+          {/* ==========================
               SUBMIT
-          ======================== */}
+          ========================== */}
 
           <button
             type="button"
@@ -486,7 +626,8 @@ const DrawEntry = () => {
               submitting ||
               alreadyEntered ||
               numbers.length !== 5 ||
-              !activeDraw
+              !activeDraw ||
+              !entryOpen
             }
             className={`
               mt-6

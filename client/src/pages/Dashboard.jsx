@@ -16,59 +16,67 @@ import Loading from "../components/Loading";
 const Dashboard = () => {
   const { user, loadingUser, checkSession } = useApp();
 
-  // ==========================================
+  // =====================================================
   // STATES
-  // ==========================================
+  // =====================================================
 
   const [scores, setScores] = useState([]);
   const [charities, setCharities] = useState([]);
   const [latestDraw, setLatestDraw] = useState(null);
 
   const [score, setScore] = useState("");
-
   const [date, setDate] = useState(
     new Date().toISOString().split("T")[0]
   );
 
   const [message, setMessage] = useState("");
 
-  const [drawLoading, setDrawLoading] = useState(true);
+  const [loadingScores, setLoadingScores] = useState(true);
   const [charityLoading, setCharityLoading] = useState(true);
+  const [drawLoading, setDrawLoading] = useState(true);
 
   const [editingId, setEditingId] = useState(null);
   const [editScore, setEditScore] = useState("");
   const [editDate, setEditDate] = useState("");
 
-  const [charityPercentage, setCharityPercentage] =
-    useState(10);
+  const [charityPercentage, setCharityPercentage] = useState(10);
+  const [updatingCharity, setUpdatingCharity] = useState(false);
 
-  const [updatingCharity, setUpdatingCharity] =
-    useState(false);
 
-  // ==========================================
+  
+
+  // =====================================================
   // LOAD SCORES
-  // ==========================================
+  // =====================================================
 
   const loadScores = async () => {
     try {
+      setLoadingScores(true);
+
       const { data } = await api.get("/scores");
 
-      console.log("SCORE RESPONSE:", data);
+      console.log("SCORES:", data);
 
-      setScores(data?.scores || []);
+      setScores(
+        Array.isArray(data?.scores)
+          ? data.scores
+          : []
+      );
     } catch (error) {
       console.error(
-        "Load scores error:",
+        "LOAD SCORES ERROR:",
         error.response?.data || error
       );
 
       setScores([]);
+    } finally {
+      setLoadingScores(false);
     }
   };
 
-  // ==========================================
+  // =====================================================
   // LOAD CHARITIES
-  // ==========================================
+  // =====================================================
 
   const loadCharities = async () => {
     try {
@@ -76,16 +84,18 @@ const Dashboard = () => {
 
       const { data } = await api.get("/charities");
 
-      console.log("CHARITY RESPONSE:", data);
+      console.log("CHARITIES:", data);
 
-      const charityData = Array.isArray(data)
+      const list = Array.isArray(data)
         ? data
-        : data?.charities || [];
+        : Array.isArray(data?.charities)
+        ? data.charities
+        : [];
 
-      setCharities(charityData);
+      setCharities(list);
     } catch (error) {
       console.error(
-        "Load charities error:",
+        "LOAD CHARITIES ERROR:",
         error.response?.data || error
       );
 
@@ -95,9 +105,9 @@ const Dashboard = () => {
     }
   };
 
-  // ==========================================
+  // =====================================================
   // LOAD LATEST DRAW
-  // ==========================================
+  // =====================================================
 
   const loadLatestDraw = async () => {
     try {
@@ -105,7 +115,7 @@ const Dashboard = () => {
 
       const { data } = await api.get("/draws/latest");
 
-      console.log("LATEST DRAW RESPONSE:", data);
+      console.log("LATEST DRAW:", data);
 
       if (data?.success && data?.draw) {
         setLatestDraw(data);
@@ -114,7 +124,7 @@ const Dashboard = () => {
       }
     } catch (error) {
       console.error(
-        "Load latest draw error:",
+        "LOAD DRAW ERROR:",
         error.response?.data || error
       );
 
@@ -124,13 +134,11 @@ const Dashboard = () => {
     }
   };
 
-  // ==========================================
-  // LOAD ALL DASHBOARD DATA
-  // ==========================================
+  // =====================================================
+  // LOAD EVERYTHING
+  // =====================================================
 
-  const loadData = async () => {
-    setMessage("");
-
+  const loadDashboard = async () => {
     await Promise.all([
       loadScores(),
       loadCharities(),
@@ -138,9 +146,9 @@ const Dashboard = () => {
     ]);
   };
 
-  // ==========================================
+  // =====================================================
   // INITIAL LOAD
-  // ==========================================
+  // =====================================================
 
   useEffect(() => {
     if (!user) return;
@@ -149,24 +157,24 @@ const Dashboard = () => {
       Number(user.charityPercentage) || 10
     );
 
-    loadData();
+    loadDashboard();
   }, [user]);
 
-  // ==========================================
+  // =====================================================
   // LOADING USER
-  // ==========================================
+  // =====================================================
 
   if (loadingUser) {
     return <Loading />;
   }
 
-  // ==========================================
-  // NOT LOGGED IN
-  // ==========================================
+  // =====================================================
+  // LOGIN REQUIRED
+  // =====================================================
 
   if (!user) {
     return (
-      <div className="min-h-[70vh] grid place-items-center">
+      <div className="min-h-[70vh] flex items-center justify-center">
         <div className="text-center">
           <p className="text-gray-600">
             Please login to access your dashboard.
@@ -183,19 +191,21 @@ const Dashboard = () => {
     );
   }
 
-  // ==========================================
+  // =====================================================
   // ADD SCORE
-  // ==========================================
+  // =====================================================
 
   const addScore = async (e) => {
     e.preventDefault();
+
+    setMessage("");
+
+    const numericScore = Number(score);
 
     if (!score || !date) {
       setMessage("Score and date are required.");
       return;
     }
-
-    const numericScore = Number(score);
 
     if (
       Number.isNaN(numericScore) ||
@@ -209,23 +219,26 @@ const Dashboard = () => {
     }
 
     try {
-      setMessage("");
-
       const { data } = await api.post("/scores", {
         score: numericScore,
         date,
       });
 
+      console.log("ADD SCORE:", data);
+
+      if (Array.isArray(data?.scores)) {
+        setScores(data.scores);
+      } else {
+        await loadScores();
+      }
+
       setScore("");
-
-      setScores(data?.scores || []);
-
       setMessage("Score added successfully.");
 
       await checkSession();
     } catch (error) {
       console.error(
-        "Add score error:",
+        "ADD SCORE ERROR:",
         error.response?.data || error
       );
 
@@ -236,26 +249,28 @@ const Dashboard = () => {
     }
   };
 
-  // ==========================================
+  // =====================================================
   // START EDIT
-  // ==========================================
+  // =====================================================
 
   const startEdit = (item) => {
     setEditingId(item._id);
     setEditScore(item.score ?? "");
 
     setEditDate(
-      new Date(item.date)
-        .toISOString()
-        .split("T")[0]
+      item.date
+        ? new Date(item.date)
+            .toISOString()
+            .split("T")[0]
+        : ""
     );
 
     setMessage("");
   };
 
-  // ==========================================
+  // =====================================================
   // CANCEL EDIT
-  // ==========================================
+  // =====================================================
 
   const cancelEdit = () => {
     setEditingId(null);
@@ -263,17 +278,19 @@ const Dashboard = () => {
     setEditDate("");
   };
 
-  // ==========================================
+  // =====================================================
   // UPDATE SCORE
-  // ==========================================
+  // =====================================================
 
   const updateScore = async (id) => {
+    setMessage("");
+
+    const numericScore = Number(editScore);
+
     if (!editScore || !editDate) {
       setMessage("Score and date are required.");
       return;
     }
-
-    const numericScore = Number(editScore);
 
     if (
       Number.isNaN(numericScore) ||
@@ -295,14 +312,20 @@ const Dashboard = () => {
         }
       );
 
-      setScores(data?.scores || []);
+      console.log("UPDATE SCORE:", data);
 
-      setMessage("Score updated successfully.");
+      if (Array.isArray(data?.scores)) {
+        setScores(data.scores);
+      } else {
+        await loadScores();
+      }
 
       cancelEdit();
+
+      setMessage("Score updated successfully.");
     } catch (error) {
       console.error(
-        "Update score error:",
+        "UPDATE SCORE ERROR:",
         error.response?.data || error
       );
 
@@ -313,9 +336,9 @@ const Dashboard = () => {
     }
   };
 
-  // ==========================================
+  // =====================================================
   // DELETE SCORE
-  // ==========================================
+  // =====================================================
 
   const deleteScore = async (id) => {
     const confirmed = window.confirm(
@@ -329,12 +352,18 @@ const Dashboard = () => {
         `/scores/${id}`
       );
 
-      setScores(data?.scores || []);
+      console.log("DELETE SCORE:", data);
+
+      if (Array.isArray(data?.scores)) {
+        setScores(data.scores);
+      } else {
+        await loadScores();
+      }
 
       setMessage("Score deleted successfully.");
     } catch (error) {
       console.error(
-        "Delete score error:",
+        "DELETE SCORE ERROR:",
         error.response?.data || error
       );
 
@@ -345,88 +374,119 @@ const Dashboard = () => {
     }
   };
 
-  // ==========================================
+  // =====================================================
+  // UPDATE CHARITY
+  // =====================================================
+
+  
+const updateCharitySettings = async ({
+  charity,
+  charityPercentage,
+}) => {
+  try {
+    setUpdatingCharity(true);
+    setMessage("");
+
+    const payload = {};
+
+    if (charity !== undefined) {
+      payload.charity = charity;
+    }
+
+    if (charityPercentage !== undefined) {
+      payload.charityPercentage = Number(charityPercentage);
+    }
+
+    const { data } = await api.patch("/profile", payload);
+
+    console.log("PROFILE UPDATE:", data);
+
+    await checkSession();
+
+    setMessage("Charity settings updated successfully.");
+    return true;
+  } catch (error) {
+    console.error(
+      "PROFILE UPDATE ERROR:",
+      error.response?.data || error
+    );
+
+    setMessage(
+      error.response?.data?.message ||
+        "Unable to update charity settings."
+    );
+
+    return false;
+  } finally {
+    setUpdatingCharity(false);
+  }
+};
+     
+
+  // =====================================================
   // SELECT CHARITY
-  // ==========================================
+  // =====================================================
 
   const selectCharity = async (e) => {
-    const charityId = e.target.value || null;
+    const charityId =
+      e.target.value || null;
 
-    try {
-      setUpdatingCharity(true);
-      setMessage("");
+    const percentage =
+      Number(charityPercentage) || 10;
 
-      await api.patch("/profile", {
-        charity: charityId,
-      });
-
-      await checkSession();
-
-      setMessage("Charity updated successfully.");
-    } catch (error) {
-      console.error(
-        "Charity update error:",
-        error.response?.data || error
-      );
-
-      setMessage(
-        error.response?.data?.message ||
-          "Unable to update charity."
-      );
-    } finally {
-      setUpdatingCharity(false);
-    }
+    await updateCharitySettings({
+      charity: charityId,
+      charityPercentage: percentage,
+    });
   };
 
-  // ==========================================
+  // =====================================================
   // UPDATE CHARITY PERCENTAGE
-  // ==========================================
+  // =====================================================
 
   const updatePercentage = async (e) => {
     const value = Number(e.target.value);
+
+    if (
+      Number.isNaN(value) ||
+      value < 10 ||
+      value > 100
+    ) {
+      return;
+    }
 
     const previousValue =
       Number(user.charityPercentage) || 10;
 
     setCharityPercentage(value);
 
-    try {
-      setUpdatingCharity(true);
-      setMessage("");
-
-      await api.patch("/profile", {
+    const success =
+      await updateCharitySettings({
+        charity:
+          user.charity?._id ||
+          user.charity ||
+          null,
         charityPercentage: value,
       });
 
-      await checkSession();
-
-      setMessage(
-        `Charity contribution updated to ${value}%.`
+    if (!success) {
+      setCharityPercentage(
+        previousValue
       );
-    } catch (error) {
-      console.error(
-        "Charity percentage update error:",
-        error.response?.data || error
-      );
-
-      setCharityPercentage(previousValue);
-
-      setMessage(
-        error.response?.data?.message ||
-          "Unable to update contribution."
-      );
-    } finally {
-      setUpdatingCharity(false);
     }
   };
 
-  // ==========================================
+  // =====================================================
   // DRAW DATA
-  // ==========================================
+  // =====================================================
 
-  const draw = latestDraw?.draw || null;
+  const draw =
+    latestDraw?.draw || null;
 
-  const winners = latestDraw?.winners || [];
+  const winners =
+    Array.isArray(latestDraw?.winners)
+      ? latestDraw.winners
+      : [];
 
   const winnerCounts =
     latestDraw?.winnerCounts || {
@@ -436,41 +496,29 @@ const Dashboard = () => {
       total: 0,
     };
 
-  // ==========================================
-  // CURRENT USER WINNER
-  // ==========================================
-
-  const currentUserWinner = winners.find(
-    (winner) => {
-      const winnerUserId =
-        winner.user?._id || winner.user;
-
-      return (
-        String(winnerUserId) ===
-        String(user?._id)
-      );
-    }
-  );
-
-  // ==========================================
-  // MY WINNINGS
-  // ==========================================
+  // =====================================================
+  // USER WINNINGS
+  // =====================================================
 
   const myWinnings = winners.filter(
     (winner) => {
       const winnerUserId =
-        winner.user?._id || winner.user;
+        winner.user?._id ||
+        winner.user;
 
       return (
         String(winnerUserId) ===
-        String(user?._id)
+        String(user._id)
       );
     }
   );
 
-  // ==========================================
+  const currentUserWinner =
+    myWinnings[0] || null;
+
+  // =====================================================
   // MATCH LABEL
-  // ==========================================
+  // =====================================================
 
   const getMatchLabel = (matchType) => {
     if (matchType === "5-number") {
@@ -488,16 +536,27 @@ const Dashboard = () => {
     return matchType || "Prize Winner";
   };
 
-  // ==========================================
+  // =====================================================
+  // CHARITY ID
+  // =====================================================
+
+  const selectedCharity =
+    user.charity?._id ||
+    user.charity ||
+    "";
+
+  // =====================================================
   // RENDER
-  // ==========================================
+  // =====================================================
 
   return (
     <div className="container-main py-10">
 
-      {/* HEADER */}
+      {/* =================================================
+          HEADER
+      ================================================= */}
 
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-5">
+      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5">
 
         <div>
           <p className="text-gray-500">
@@ -516,27 +575,34 @@ const Dashboard = () => {
 
         <span
           className={`inline-flex w-fit px-4 py-2 rounded-full text-sm font-bold ${
-            user.subscriptionStatus === "active"
+            user.subscriptionStatus ===
+            "active"
               ? "bg-green-100 text-green-800"
               : "bg-gray-100 text-gray-700"
           }`}
         >
-          {user.subscriptionStatus || "inactive"}
+          {user.subscriptionStatus ||
+            "inactive"}
         </span>
 
       </div>
 
-      {/* MESSAGE */}
+      {/* =================================================
+          MESSAGE
+      ================================================= */}
 
       {message && (
-        <div className="mt-5 p-4 rounded-xl bg-gray-50 text-sm text-gray-700">
+        <div className="mt-5 p-4 rounded-xl bg-gray-50 border text-sm text-gray-700">
           {message}
         </div>
       )}
 
-      {/* SUBSCRIPTION CTA */}
+      {/* =================================================
+          SUBSCRIPTION CTA
+      ================================================= */}
 
-      {user.subscriptionStatus !== "active" && (
+      {user.subscriptionStatus !==
+        "active" && (
         <div className="mt-8 rounded-3xl bg-[#173f2b] text-white p-8 md:p-10">
 
           <p className="text-white/60 text-sm font-bold">
@@ -563,7 +629,9 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* STATS */}
+      {/* =================================================
+          STATS
+      ================================================= */}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
 
@@ -620,11 +688,13 @@ const Dashboard = () => {
 
       </div>
 
-      {/* LATEST DRAW */}
+      {/* =================================================
+          LATEST DRAW
+      ================================================= */}
 
       <div className="card p-7 mt-8">
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
 
           <div>
             <p className="text-[#d89b28] text-sm font-bold">
@@ -642,7 +712,8 @@ const Dashboard = () => {
             </p>
           </div>
 
-          {draw?.status === "published" && (
+          {draw?.status ===
+            "published" && (
             <span className="px-4 py-2 rounded-full bg-green-100 text-green-700 text-sm font-bold">
               Published
             </span>
@@ -651,19 +722,14 @@ const Dashboard = () => {
         </div>
 
         {drawLoading ? (
-
           <div className="py-10 text-center text-gray-500">
             Loading latest draw...
           </div>
-
         ) : !draw ? (
-
           <div className="py-10 text-center text-gray-500">
             No published draw available yet.
           </div>
-
         ) : (
-
           <>
 
             {/* WINNING NUMBERS */}
@@ -677,9 +743,9 @@ const Dashboard = () => {
               <div className="flex flex-wrap gap-3">
 
                 {(draw.numbers || []).map(
-                  (number) => (
+                  (number, index) => (
                     <div
-                      key={number}
+                      key={`${number}-${index}`}
                       className="w-12 h-12 rounded-full bg-[#173f2b] text-white grid place-items-center font-black text-lg"
                     >
                       {number}
@@ -691,7 +757,7 @@ const Dashboard = () => {
 
             </div>
 
-            {/* DRAW INFORMATION */}
+            {/* DRAW INFO */}
 
             <div className="grid sm:grid-cols-3 gap-4 mt-8">
 
@@ -701,7 +767,8 @@ const Dashboard = () => {
                 </p>
 
                 <p className="text-2xl font-black text-[#173f2b] mt-1">
-                  {draw.eligibleSubscribers ?? 0}
+                  {draw.eligibleSubscribers ??
+                    0}
                 </p>
               </div>
 
@@ -713,7 +780,7 @@ const Dashboard = () => {
                 <p className="text-2xl font-black text-[#173f2b] mt-1">
                   ₹
                   {Number(
-                    draw.prizePool ?? 0
+                    draw.prizePool || 0
                   ).toLocaleString("en-IN")}
                 </p>
               </div>
@@ -726,14 +793,14 @@ const Dashboard = () => {
                 <p className="text-2xl font-black text-[#173f2b] mt-1">
                   ₹
                   {Number(
-                    draw.jackpot ?? 0
+                    draw.jackpot || 0
                   ).toLocaleString("en-IN")}
                 </p>
               </div>
 
             </div>
 
-            {/* WINNER SUMMARY */}
+            {/* WINNER COUNTS */}
 
             <div className="grid sm:grid-cols-4 gap-4 mt-6">
 
@@ -810,8 +877,11 @@ const Dashboard = () => {
                     <p className="text-green-800 font-black text-xl mt-2">
                       ₹
                       {Number(
-                        currentUserWinner.prize || 0
-                      ).toLocaleString("en-IN")}
+                        currentUserWinner.prize ||
+                          0
+                      ).toLocaleString(
+                        "en-IN"
+                      )}
                     </p>
 
                     <p className="text-green-700 text-xs mt-1">
@@ -841,12 +911,13 @@ const Dashboard = () => {
             )}
 
           </>
-
         )}
 
       </div>
 
-      {/* MY WINNINGS */}
+      {/* =================================================
+          MY WINNINGS
+      ================================================= */}
 
       <section className="mt-8">
 
@@ -874,7 +945,6 @@ const Dashboard = () => {
         </div>
 
         {myWinnings.length === 0 ? (
-
           <div className="card p-8 text-center">
 
             <Trophy
@@ -892,162 +962,165 @@ const Dashboard = () => {
             </p>
 
           </div>
-
         ) : (
-
           <div className="space-y-4">
 
-            {myWinnings.map((winner) => (
+            {myWinnings.map(
+              (winner) => (
+                <div
+                  key={winner._id}
+                  className="card p-6"
+                >
 
-              <div
-                key={winner._id}
-                className="card p-6"
-              >
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
 
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+                    <div className="flex items-start gap-4">
 
-                  <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-[#e9f1eb] text-[#173f2b] grid place-items-center shrink-0">
+                        <Trophy size={23} />
+                      </div>
 
-                    <div className="w-12 h-12 rounded-xl bg-[#e9f1eb] text-[#173f2b] grid place-items-center shrink-0">
-                      <Trophy size={23} />
+                      <div>
+
+                        <h3 className="text-xl font-black text-[#173f2b]">
+                          {getMatchLabel(
+                            winner.matchType
+                          )}
+                        </h3>
+
+                        <p className="text-sm text-gray-500 mt-1">
+                          {draw?.month}{" "}
+                          {draw?.year}
+                        </p>
+
+                      </div>
+
                     </div>
 
-                    <div>
+                    <div className="md:text-right">
 
-                      <h3 className="text-xl font-black text-[#173f2b]">
-                        {getMatchLabel(
-                          winner.matchType
+                      <p className="text-sm text-gray-500">
+                        Prize
+                      </p>
+
+                      <p className="text-3xl font-black text-[#173f2b]">
+                        ₹
+                        {Number(
+                          winner.prize || 0
+                        ).toLocaleString(
+                          "en-IN"
                         )}
-                      </h3>
-
-                      <p className="text-sm text-gray-500 mt-1">
-                        {draw?.month}{" "}
-                        {draw?.year}
                       </p>
 
                     </div>
 
                   </div>
 
-                  <div className="md:text-right">
+                  <div className="grid sm:grid-cols-2 gap-4 mt-6">
 
-                    <p className="text-sm text-gray-500">
-                      Prize
-                    </p>
+                    <div className="rounded-xl bg-gray-50 p-4">
 
-                    <p className="text-3xl font-black text-[#173f2b]">
-                      ₹
-                      {Number(
-                        winner.prize || 0
-                      ).toLocaleString("en-IN")}
-                    </p>
+                      <p className="text-xs text-gray-500">
+                        Verification
+                      </p>
+
+                      <span
+                        className={`inline-flex mt-2 px-3 py-1 rounded-full text-xs font-bold ${
+                          winner.verificationStatus ===
+                          "approved"
+                            ? "bg-green-100 text-green-700"
+                            : winner.verificationStatus ===
+                              "rejected"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-yellow-100 text-yellow-700"
+                        }`}
+                      >
+                        {winner.verificationStatus ||
+                          "pending"}
+                      </span>
+
+                    </div>
+
+                    <div className="rounded-xl bg-gray-50 p-4">
+
+                      <p className="text-xs text-gray-500">
+                        Payout
+                      </p>
+
+                      <span
+                        className={`inline-flex mt-2 px-3 py-1 rounded-full text-xs font-bold ${
+                          winner.payoutStatus ===
+                          "paid"
+                            ? "bg-green-100 text-green-700"
+                            : winner.payoutStatus ===
+                              "failed"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {winner.payoutStatus ||
+                          "pending"}
+                      </span>
+
+                    </div>
+
+                  </div>
+
+                  <div className="flex flex-wrap gap-5 mt-5 text-xs text-gray-500">
+
+                    {winner.verifiedAt && (
+                      <span>
+                        Verified:{" "}
+                        {new Date(
+                          winner.verifiedAt
+                        ).toLocaleDateString(
+                          "en-IN"
+                        )}
+                      </span>
+                    )}
+
+                    {winner.paidAt && (
+                      <span>
+                        Paid:{" "}
+                        {new Date(
+                          winner.paidAt
+                        ).toLocaleDateString(
+                          "en-IN"
+                        )}
+                      </span>
+                    )}
+
+                    {winner.createdAt && (
+                      <span>
+                        Created:{" "}
+                        {new Date(
+                          winner.createdAt
+                        ).toLocaleDateString(
+                          "en-IN"
+                        )}
+                      </span>
+                    )}
 
                   </div>
 
                 </div>
-
-                <div className="grid sm:grid-cols-2 gap-4 mt-6">
-
-                  <div className="rounded-xl bg-gray-50 p-4">
-
-                    <p className="text-xs text-gray-500">
-                      Verification
-                    </p>
-
-                    <span
-                      className={`inline-flex mt-2 px-3 py-1 rounded-full text-xs font-bold ${
-                        winner.verificationStatus ===
-                        "approved"
-                          ? "bg-green-100 text-green-700"
-                          : winner.verificationStatus ===
-                            "rejected"
-                          ? "bg-red-100 text-red-700"
-                          : "bg-yellow-100 text-yellow-700"
-                      }`}
-                    >
-                      {winner.verificationStatus ||
-                        "pending"}
-                    </span>
-
-                  </div>
-
-                  <div className="rounded-xl bg-gray-50 p-4">
-
-                    <p className="text-xs text-gray-500">
-                      Payout
-                    </p>
-
-                    <span
-                      className={`inline-flex mt-2 px-3 py-1 rounded-full text-xs font-bold ${
-                        winner.payoutStatus ===
-                        "paid"
-                          ? "bg-green-100 text-green-700"
-                          : winner.payoutStatus ===
-                            "failed"
-                          ? "bg-red-100 text-red-700"
-                          : "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      {winner.payoutStatus ||
-                        "pending"}
-                    </span>
-
-                  </div>
-
-                </div>
-
-                <div className="flex flex-wrap gap-5 mt-5 text-xs text-gray-500">
-
-                  {winner.verifiedAt && (
-                    <span>
-                      Verified:{" "}
-                      {new Date(
-                        winner.verifiedAt
-                      ).toLocaleDateString(
-                        "en-IN"
-                      )}
-                    </span>
-                  )}
-
-                  {winner.paidAt && (
-                    <span>
-                      Paid:{" "}
-                      {new Date(
-                        winner.paidAt
-                      ).toLocaleDateString(
-                        "en-IN"
-                      )}
-                    </span>
-                  )}
-
-                  {winner.createdAt && (
-                    <span>
-                      Created:{" "}
-                      {new Date(
-                        winner.createdAt
-                      ).toLocaleDateString(
-                        "en-IN"
-                      )}
-                    </span>
-                  )}
-
-                </div>
-
-              </div>
-
-            ))}
+              )
+            )}
 
           </div>
-
         )}
 
       </section>
 
-      {/* SCORES + CHARITY */}
+      {/* =================================================
+          SCORES + CHARITY
+      ================================================= */}
 
       <div className="grid lg:grid-cols-2 gap-6 mt-8">
 
-        {/* SCORES */}
+        {/* =================================================
+            SCORES
+        ================================================= */}
 
         <div className="card p-7">
 
@@ -1101,149 +1174,158 @@ const Dashboard = () => {
 
           </form>
 
-          {/* SCORES */}
+          {/* SCORE LIST */}
 
           <div className="mt-7">
 
-            {scores.length === 0 ? (
-
+            {loadingScores ? (
+              <div className="py-8 text-center text-gray-500">
+                Loading scores...
+              </div>
+            ) : scores.length === 0 ? (
               <div className="py-8 text-center text-gray-500">
                 No scores added yet.
               </div>
-
             ) : (
+              scores.map(
+                (item, index) => (
+                  <div
+                    key={item._id}
+                    className="border-b last:border-0 py-4"
+                  >
 
-              scores.map((item, index) => (
+                    {editingId ===
+                    item._id ? (
+                      <div className="space-y-3">
 
-                <div
-                  key={item._id}
-                  className="border-b last:border-0 py-4"
-                >
+                        <div className="grid grid-cols-2 gap-3">
 
-                  {editingId === item._id ? (
+                          <input
+                            type="number"
+                            min="1"
+                            max="45"
+                            className="input"
+                            value={editScore}
+                            onChange={(e) =>
+                              setEditScore(
+                                e.target.value
+                              )
+                            }
+                          />
 
-                    <div className="space-y-3">
+                          <input
+                            type="date"
+                            className="input"
+                            value={editDate}
+                            onChange={(e) =>
+                              setEditDate(
+                                e.target.value
+                              )
+                            }
+                          />
 
-                      <div className="grid grid-cols-2 gap-3">
-
-                        <input
-                          type="number"
-                          min="1"
-                          max="45"
-                          className="input"
-                          value={editScore}
-                          onChange={(e) =>
-                            setEditScore(
-                              e.target.value
-                            )
-                          }
-                        />
-
-                        <input
-                          type="date"
-                          className="input"
-                          value={editDate}
-                          onChange={(e) =>
-                            setEditDate(
-                              e.target.value
-                            )
-                          }
-                        />
-
-                      </div>
-
-                      <div className="flex gap-2">
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateScore(item._id)
-                          }
-                          className="btn-primary"
-                        >
-                          Save
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={cancelEdit}
-                          className="px-4 py-2 rounded-xl border hover:bg-gray-50"
-                        >
-                          Cancel
-                        </button>
-
-                      </div>
-
-                    </div>
-
-                  ) : (
-
-                    <div className="flex items-center justify-between gap-4">
-
-                      <div className="flex items-center gap-4">
-
-                        <div className="w-9 h-9 rounded-full bg-[#e9f1eb] grid place-items-center font-bold text-[#173f2b]">
-                          {index + 1}
                         </div>
 
-                        <div>
+                        <div className="flex gap-2">
 
-                          <p className="font-bold">
-                            Stableford score:{" "}
-                            {item.score}
-                          </p>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateScore(
+                                item._id
+                              )
+                            }
+                            className="btn-primary"
+                          >
+                            Save
+                          </button>
 
-                          <p className="text-sm text-gray-500">
-                            {new Date(
-                              item.date
-                            ).toLocaleDateString(
-                              "en-IN"
-                            )}
-                          </p>
+                          <button
+                            type="button"
+                            onClick={
+                              cancelEdit
+                            }
+                            className="px-4 py-2 rounded-xl border hover:bg-gray-50"
+                          >
+                            Cancel
+                          </button>
 
                         </div>
 
                       </div>
+                    ) : (
+                      <div className="flex items-center justify-between gap-4">
 
-                      <div className="flex gap-2">
+                        <div className="flex items-center gap-4">
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            startEdit(item)
-                          }
-                          className="px-3 py-2 rounded-lg bg-gray-100 text-sm font-semibold hover:bg-gray-200"
-                        >
-                          Edit
-                        </button>
+                          <div className="w-9 h-9 rounded-full bg-[#e9f1eb] grid place-items-center font-bold text-[#173f2b]">
+                            {index + 1}
+                          </div>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            deleteScore(item._id)
-                          }
-                          className="px-3 py-2 rounded-lg bg-red-50 text-red-600 text-sm font-semibold hover:bg-red-100"
-                        >
-                          Delete
-                        </button>
+                          <div>
+
+                            <p className="font-bold">
+                              Stableford score:{" "}
+                              {item.score}
+                            </p>
+
+                            <p className="text-sm text-gray-500">
+                              {item.date
+                                ? new Date(
+                                    item.date
+                                  ).toLocaleDateString(
+                                    "en-IN"
+                                  )
+                                : "-"}
+                            </p>
+
+                          </div>
+
+                        </div>
+
+                        <div className="flex gap-2">
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              startEdit(
+                                item
+                              )
+                            }
+                            className="px-3 py-2 rounded-lg bg-gray-100 text-sm font-semibold hover:bg-gray-200"
+                          >
+                            Edit
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              deleteScore(
+                                item._id
+                              )
+                            }
+                            className="px-3 py-2 rounded-lg bg-red-50 text-red-600 text-sm font-semibold hover:bg-red-100"
+                          >
+                            Delete
+                          </button>
+
+                        </div>
 
                       </div>
+                    )}
 
-                    </div>
-
-                  )}
-
-                </div>
-
-              ))
-
+                  </div>
+                )
+              )
             )}
 
           </div>
 
         </div>
 
-        {/* CHARITY */}
+        {/* =================================================
+            CHARITY
+        ================================================= */}
 
         <div className="card p-7">
 
@@ -1263,11 +1345,7 @@ const Dashboard = () => {
 
           <select
             className="input mt-7"
-            value={
-              user.charity?._id ||
-              user.charity ||
-              ""
-            }
+            value={selectedCharity}
             onChange={selectCharity}
             disabled={
               updatingCharity ||
@@ -1279,32 +1357,27 @@ const Dashboard = () => {
               Select a charity
             </option>
 
-            {charities.map((charity) => (
-
-              <option
-                key={charity._id}
-                value={charity._id}
-              >
-                {charity.name}
-              </option>
-
-            ))}
+            {charities.map(
+              (charity) => (
+                <option
+                  key={charity._id}
+                  value={charity._id}
+                >
+                  {charity.name}
+                </option>
+              )
+            )}
 
           </select>
 
           {charityLoading ? (
-
             <p className="text-sm text-gray-500 mt-2">
               Loading charities...
             </p>
-
           ) : charities.length === 0 ? (
-
             <p className="text-sm text-gray-500 mt-2">
               No charities available yet.
-              Please check the charity directory.
             </p>
-
           ) : null}
 
           {/* CONTRIBUTION */}
@@ -1335,8 +1408,13 @@ const Dashboard = () => {
             />
 
             <div className="flex justify-between text-xs text-gray-400 mt-2">
-              <span>10% minimum</span>
-              <span>100%</span>
+              <span>
+                10% minimum
+              </span>
+
+              <span>
+                100%
+              </span>
             </div>
 
           </div>
@@ -1348,8 +1426,7 @@ const Dashboard = () => {
             <p className="text-sm text-gray-600">
               Your contribution is separate
               from your draw participation and
-              is designed to support the charity
-              you choose.
+              supports the charity you choose.
             </p>
 
           </div>

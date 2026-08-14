@@ -9,308 +9,662 @@ import {
   requireAdmin,
 } from "../middleware/auth.js";
 
+
 const router = express.Router();
+
 
 // ==========================================
 // HELPERS
 // ==========================================
 
-function getCurrentMonthYear() {
+function getCurrentMonthYear(){
+
   const now = new Date();
 
   return {
-    month: now.toLocaleString("en-US", {
-      month: "long",
-    }),
-    year: now.getFullYear(),
+
+    month: now.toLocaleString(
+      "en-US",
+      {
+        month:"long"
+      }
+    ),
+
+    year: now.getFullYear()
+
   };
+
 }
 
-function generateRandomNumbers() {
+
+
+function generateRandomNumbers(){
+
   const numbers = new Set();
 
-  while (numbers.size < 5) {
+
+  while(numbers.size < 5){
+
     numbers.add(
-      Math.floor(Math.random() * 45) + 1
+      Math.floor(Math.random()*45)+1
     );
+
   }
 
-  return [...numbers].sort((a, b) => a - b);
+
+  return [...numbers].sort(
+    (a,b)=>a-b
+  );
+
 }
 
-async function getOrCreateCurrentDraw() {
-  const { month, year } = getCurrentMonthYear();
 
-  let draw = await Draw.findOne({
-    month,
-    year,
-  });
 
-  if (draw) {
-    return draw;
-  }
+// ==========================================
+// GET OR CREATE DRAW
+// ==========================================
 
-  const eligibleSubscribers =
-    await User.countDocuments({
-      subscriptionStatus: "active",
-      isActive: true,
-    });
 
-  const prizePool = eligibleSubscribers * 100;
+async function getOrCreateCurrentDraw(){
 
-  draw = await Draw.create({
-    month,
-    year,
-    eligibleSubscribers,
-    prizePool,
-    jackpot: prizePool * 0.4,
-    numbers: [],
-    status: "pending",
-  });
 
-  return draw;
+ const {month,year} =
+ getCurrentMonthYear();
+
+
+
+ let draw =
+ await Draw.findOne({
+   month,
+   year
+ });
+
+
+
+ if(draw){
+
+   return draw;
+
+ }
+
+
+
+ draw =
+ await Draw.create({
+
+   month,
+
+   year,
+
+   numbers:[],
+
+   eligibleSubscribers:0,
+
+   prizePool:0,
+
+   jackpot:0,
+
+   status:"pending"
+
+ });
+
+
+
+ return draw;
+
+
 }
 
+
+
+
+
 // ==========================================
-// GET CURRENT DRAW
-// GET /api/admin/draws/current
+// CURRENT DRAW
 // ==========================================
+
 
 router.get(
-  "/current",
-  requireAuth,
-  requireAdmin,
-  async (req, res) => {
-    try {
-      const draw =
-        await getOrCreateCurrentDraw();
+"/current",
+requireAuth,
+requireAdmin,
+async(req,res)=>{
 
-      return res.json({
-        success: true,
-        draw,
-      });
-    } catch (error) {
-      console.error(
-        "Get current draw error:",
-        error
-      );
 
-      return res.status(500).json({
-        success: false,
-        message:
-          "Failed to load current draw",
-      });
-    }
-  }
-);
+ try{
+
+
+ const draw =
+ await getOrCreateCurrentDraw();
+
+
+
+ res.json({
+
+ success:true,
+
+ draw
+
+ });
+
+
+ }catch(error){
+
+
+ console.log(error);
+
+
+ res.status(500).json({
+
+ success:false,
+
+ message:"Failed"
+
+ });
+
+
+ }
+
+
+});
+
+
+
+
+
 
 // ==========================================
 // SIMULATE DRAW
-// POST /api/admin/draws/simulate
 // ==========================================
+
 
 router.post(
-  "/simulate",
-  requireAuth,
-  requireAdmin,
-  async (req, res) => {
-    try {
-      const draw =
-        await getOrCreateCurrentDraw();
+"/simulate",
+requireAuth,
+requireAdmin,
+async(req,res)=>{
 
-      if (draw.status === "published") {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Draw is already published",
-        });
-      }
 
-      const numbers =
-        generateRandomNumbers();
+try{
 
-      draw.numbers = numbers;
-      draw.status = "simulated";
 
-      await draw.save();
+const draw =
+await getOrCreateCurrentDraw();
 
-      return res.json({
-        success: true,
-        message:
-          "Draw simulated successfully",
 
-        drawId: draw._id,
 
-        numbers,
 
-        eligibleSubscribers:
-          draw.eligibleSubscribers,
+// GET USER ENTRIES
 
-        prizePool:
-          draw.prizePool,
+const entries =
+await DrawEntry.find({
 
-        jackpot:
-          draw.jackpot,
+ draw:draw._id
 
-        matches: {
-          five: 0,
-          four: 0,
-          three: 0,
-        },
+});
 
-        prizeDistribution: {
-          fiveNumber: {
-            count: 0,
-            prizePerWinner:
-              draw.jackpot,
-            totalPrize: 0,
-          },
 
-          fourNumber: {
-            count: 0,
-            prizePerWinner:
-              draw.prizePool * 0.35,
-            totalPrize: 0,
-          },
 
-          threeNumber: {
-            count: 0,
-            prizePerWinner:
-              draw.prizePool * 0.25,
-            totalPrize: 0,
-          },
-        },
 
-        draw,
-      });
-    } catch (error) {
-      console.error(
-        "Simulate draw error:",
-        error
-      );
 
-      return res.status(500).json({
-        success: false,
-        message:
-          "Failed to simulate draw",
-      });
-    }
-  }
+// UPDATE COUNT
+
+draw.eligibleSubscribers =
+entries.length;
+
+
+
+draw.prizePool =
+entries.length * 100;
+
+
+
+draw.jackpot =
+draw.prizePool * 0.4;
+
+
+
+
+
+// RANDOM WINNING NUMBER
+
+
+const numbers =
+generateRandomNumbers();
+
+
+
+draw.numbers =
+numbers;
+
+
+draw.status =
+"simulated";
+
+
+
+await draw.save();
+
+
+
+
+res.json({
+
+success:true,
+
+message:
+"Draw simulated successfully",
+
+drawId:draw._id,
+
+numbers,
+
+eligibleSubscribers:
+draw.eligibleSubscribers,
+
+prizePool:
+draw.prizePool,
+
+jackpot:
+draw.jackpot,
+
+
+draw
+
+
+});
+
+
+
+}catch(error){
+
+
+console.log(
+"SIMULATE ERROR",
+error
 );
 
+
+
+res.status(500).json({
+
+success:false,
+
+message:
+"Simulation failed"
+
+});
+
+
+}
+
+
+
+});
+
 // ==========================================
-// PUBLISH DRAW
+// PUBLISH DRAW + CREATE WINNERS
 // POST /api/admin/draws/publish
 // ==========================================
 
+
 router.post(
-  "/publish",
-  requireAuth,
-  requireAdmin,
-  async (req, res) => {
-    try {
-      const {
-        drawId,
-        numbers,
-      } = req.body;
+"/publish",
+requireAuth,
+requireAdmin,
+async(req,res)=>{
 
-      if (!drawId) {
-        return res.status(400).json({
-          success: false,
-          message: "Draw ID is required",
-        });
-      }
 
-      const draw =
-        await Draw.findById(drawId);
+try{
 
-      if (!draw) {
-        return res.status(404).json({
-          success: false,
-          message: "Draw not found",
-        });
-      }
 
-      if (draw.status === "published") {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Draw is already published",
-        });
-      }
+const {
+drawId,
+numbers
+}=req.body;
 
-      if (
-        !Array.isArray(numbers) ||
-        numbers.length !== 5
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Exactly 5 winning numbers are required",
-        });
-      }
 
-      const winningNumbers =
-        numbers.map(Number);
 
-      const invalidNumber =
-        winningNumbers.some(
-          (number) =>
-            !Number.isInteger(number) ||
-            number < 1 ||
-            number > 45
-        );
+if(!drawId){
 
-      if (invalidNumber) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Winning numbers must be between 1 and 45",
-        });
-      }
+return res.status(400).json({
 
-      if (
-        new Set(winningNumbers).size !== 5
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Winning numbers must be unique",
-        });
-      }
+success:false,
 
-      winningNumbers.sort(
-        (a, b) => a - b
-      );
+message:"Draw ID required"
 
-      draw.numbers = winningNumbers;
-      draw.status = "published";
-      draw.publishedAt = new Date();
+});
 
-      await draw.save();
+}
 
-      return res.json({
-        success: true,
-        message:
-          "Draw published successfully",
-        drawId: draw._id,
-        numbers: winningNumbers,
-        draw,
-      });
-    } catch (error) {
-      console.error(
-        "Publish draw error:",
-        error
-      );
 
-      return res.status(500).json({
-        success: false,
-        message:
-          "Failed to publish draw",
-      });
-    }
-  }
+
+
+const draw =
+await Draw.findById(drawId);
+
+
+
+if(!draw){
+
+return res.status(404).json({
+
+success:false,
+
+message:"Draw not found"
+
+});
+
+}
+
+
+
+
+if(
+!Array.isArray(numbers) ||
+numbers.length!==5
+){
+
+
+return res.status(400).json({
+
+success:false,
+
+message:
+"Exactly 5 numbers required"
+
+});
+
+
+}
+
+
+
+
+
+const winningNumbers =
+numbers.map(Number);
+
+
+
+
+if(
+new Set(winningNumbers).size !== 5
+){
+
+
+return res.status(400).json({
+
+success:false,
+
+message:
+"Numbers must be unique"
+
+});
+
+
+}
+
+
+
+
+winningNumbers.sort(
+(a,b)=>a-b
 );
+
+
+
+
+// SAVE DRAW
+
+
+draw.numbers =
+winningNumbers;
+
+
+draw.status =
+"published";
+
+
+draw.publishedAt =
+new Date();
+
+
+
+await draw.save();
+
+
+
+
+
+
+
+// =====================================
+// FIND USER ENTRIES
+// =====================================
+
+
+const entries =
+await DrawEntry.find({
+
+draw:draw._id
+
+});
+
+
+
+
+
+const createdWinners=[];
+
+
+
+
+
+// =====================================
+// CHECK MATCH
+// =====================================
+
+
+for(const entry of entries){
+
+
+const userNumbers =
+entry.numbers.map(Number);
+
+
+
+const matchedNumbers =
+winningNumbers.filter(
+num =>
+userNumbers.includes(num)
+);
+
+
+
+const matchCount =
+matchedNumbers.length;
+
+
+
+let matchType=null;
+
+let prize=0;
+
+
+
+
+if(matchCount===5){
+
+
+matchType="5-number";
+
+prize =
+draw.jackpot;
+
+
+}
+
+else if(matchCount===4){
+
+
+matchType="4-number";
+
+
+prize =
+draw.prizePool * 0.35;
+
+
+}
+
+
+else if(matchCount===3){
+
+
+matchType="3-number";
+
+
+prize =
+draw.prizePool * 0.25;
+
+
+}
+
+
+
+
+// NO WINNER
+
+if(!matchType){
+
+continue;
+
+}
+
+
+
+
+
+// DUPLICATE CHECK
+
+
+const exist =
+await Winner.findOne({
+
+user:entry.user,
+
+draw:draw._id
+
+});
+
+
+
+if(exist){
+
+continue;
+
+}
+
+
+
+
+
+
+const winner =
+await Winner.create({
+
+user:entry.user,
+
+draw:draw._id,
+
+numbers:userNumbers,
+
+matchedNumbers,
+
+matchType,
+
+prize,
+
+
+verificationStatus:
+"pending",
+
+
+payoutStatus:
+"pending",
+
+
+proofUrl:""
+
+
+});
+
+
+
+createdWinners.push(
+winner
+);
+
+
+
+}
+
+
+
+
+
+
+return res.json({
+
+success:true,
+
+message:
+"Draw published and winners created",
+
+
+draw,
+
+
+winners:
+createdWinners,
+
+
+totalWinners:
+createdWinners.length
+
+
+});
+
+
+
+
+}catch(error){
+
+
+
+console.error(
+"PUBLISH ERROR",
+error
+);
+
+
+
+return res.status(500).json({
+
+success:false,
+
+message:
+"Publish failed"
+
+});
+
+
+}
+
+
+
+});
+
 
 // ==========================================
 // CALCULATE WINNERS
@@ -325,8 +679,7 @@ router.post(
     try {
       const { drawId } = req.params;
 
-      const draw =
-        await Draw.findById(drawId);
+      const draw = await Draw.findById(drawId);
 
       if (!draw) {
         return res.status(404).json({
@@ -338,8 +691,7 @@ router.post(
       if (draw.status !== "published") {
         return res.status(400).json({
           success: false,
-          message:
-            "Draw is not published yet",
+          message: "Draw is not published yet",
         });
       }
 
@@ -349,17 +701,23 @@ router.post(
       ) {
         return res.status(400).json({
           success: false,
-          message:
-            "Draw does not have valid winning numbers",
+          message: "Invalid winning numbers",
         });
       }
 
-      const entries =
-        await DrawEntry.find({
-          draw: draw._id,
-        });
+      // =====================================
+      // FIND ENTRIES FOR SAME DRAW
+      // =====================================
 
-      const winners = [];
+      const entries = await DrawEntry.find({
+        draw: draw._id,
+      });
+
+      const createdWinners = [];
+
+      // =====================================
+      // CHECK EACH USER ENTRY
+      // =====================================
 
       for (const entry of entries) {
         const userNumbers =
@@ -376,22 +734,34 @@ router.post(
         let matchType = null;
         let prize = 0;
 
+        // 5 MATCH
         if (matchCount === 5) {
           matchType = "5-number";
           prize = draw.jackpot;
-        } else if (matchCount === 4) {
+        }
+
+        // 4 MATCH
+        else if (matchCount === 4) {
           matchType = "4-number";
           prize =
             draw.prizePool * 0.35;
-        } else if (matchCount === 3) {
+        }
+
+        // 3 MATCH
+        else if (matchCount === 3) {
           matchType = "3-number";
           prize =
             draw.prizePool * 0.25;
         }
 
+        // No winner
         if (!matchType) {
           continue;
         }
+
+        // =====================================
+        // DUPLICATE CHECK
+        // =====================================
 
         const existingWinner =
           await Winner.findOne({
@@ -403,6 +773,10 @@ router.post(
           continue;
         }
 
+        // =====================================
+        // CREATE WINNER
+        // =====================================
+
         const winner =
           await Winner.create({
             user: entry.user,
@@ -411,77 +785,165 @@ router.post(
             matchedNumbers,
             matchType,
             prize,
+
             proofUrl: "",
+
             verificationStatus:
               "pending",
+
             payoutStatus:
               "pending",
+
             verifiedAt: null,
+
             paidAt: null,
           });
 
-        winners.push(winner);
+        createdWinners.push(winner);
       }
 
       return res.json({
         success: true,
 
         message:
-          winners.length > 0
+          createdWinners.length > 0
             ? "Winners calculated successfully"
-            : "Winner calculation completed. No winners found.",
+            : "No winners found",
 
-        winners,
+        totalWinners:
+          createdWinners.length,
+
+        winners: createdWinners,
       });
+
     } catch (error) {
       console.error(
-        "Calculate winners error:",
+        "CALCULATE WINNERS ERROR:",
         error
       );
 
       return res.status(500).json({
         success: false,
-        message:
-          "Failed to calculate winners",
+        message: "Failed to calculate winners",
       });
     }
   }
 );
+
+
+
+
 
 // ==========================================
 // GET ALL DRAWS
-// GET /api/admin/draws
 // ==========================================
 
+
 router.get(
-  "/",
-  requireAuth,
-  requireAdmin,
-  async (req, res) => {
-    try {
-      const draws =
-        await Draw.find()
-          .sort({
-            createdAt: -1,
-          });
+"/",
+requireAuth,
+requireAdmin,
+async(req,res)=>{
 
-      return res.json({
-        success: true,
-        draws,
-      });
-    } catch (error) {
-      console.error(
-        "Get all draws error:",
-        error
-      );
 
-      return res.status(500).json({
+try{
+
+
+const draws =
+await Draw.find()
+.sort({
+createdAt:-1
+});
+
+
+
+res.json({
+
+success:true,
+
+draws
+
+});
+
+
+
+}catch(error){
+
+
+res.status(500).json({
+
+success:false,
+
+message:
+"Failed to load draws"
+
+});
+
+
+}
+
+
+});
+
+router.post("/open", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { drawId } = req.body;
+
+    if (!drawId) {
+      return res.status(400).json({
         success: false,
-        message:
-          "Failed to load draws",
+        message: "Draw ID is required",
       });
     }
+
+    const draw = await Draw.findById(drawId);
+
+    if (!draw) {
+      return res.status(404).json({
+        success: false,
+        message: "Draw not found",
+      });
+    }
+
+    if (draw.status === "published") {
+      return res.status(400).json({
+        success: false,
+        message: "Published draw cannot be opened.",
+      });
+    }
+
+    if (draw.status === "simulated") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Simulated draw cannot be opened. Create/open a new draw.",
+      });
+    }
+
+    draw.status = "open";
+
+    await draw.save();
+
+    return res.json({
+      success: true,
+      message: "Draw is now open for entries.",
+      draw,
+    });
+  } catch (error) {
+    console.error(
+      "Open draw error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to open draw.",
+    });
   }
-);
+});
+
+
+
+
 
 export default router;

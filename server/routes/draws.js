@@ -4,6 +4,8 @@ import User from "../models/User.js";
 import Winner from "../models/Winner.js";
 import DrawEntry from "../models/DrawEntry.js";
 
+console.log("DRAW ROUTE LOADED");
+
 import {
   requireAuth,
   requireAdmin,
@@ -118,6 +120,13 @@ router.get(
     }
   }
 );
+
+router.get("/test",(req,res)=>{
+  res.json({
+    success:true,
+    message:"Draw route working"
+  });
+});
 
 // ==========================================
 // SIMULATE DRAW
@@ -799,6 +808,92 @@ router.get(
 );
 
 // ==========================================
+// PUBLIC - ACTIVE CURRENT DRAW
+// GET /api/draws/active
+// ==========================================
+
+router.get(
+  "/active",
+  async (req, res) => {
+    try {
+
+      const draw = await getOrCreateCurrentDraw();
+
+      return res.json({
+        success: true,
+        draw
+      });
+
+    } catch(error){
+
+      console.error(
+        "Active draw error:",
+        error
+      );
+
+      return res.status(500).json({
+        success:false,
+        message:"Failed to load active draw"
+      });
+
+    }
+  }
+);
+
+
+
+// ==========================================
+// USER - MY CURRENT DRAW ENTRY
+// GET /api/draws/my-entry
+// ==========================================
+
+router.get(
+  "/my-entry",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const userId =
+        req.user?._id || req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "User not authenticated",
+        });
+      }
+
+      const draw = await getOrCreateCurrentDraw();
+
+      if (!draw) {
+        return res.json({
+          success: true,
+          entered: false,
+          entry: null,
+        });
+      }
+
+      const entry = await DrawEntry.findOne({
+        user: userId,
+        draw: draw._id,
+      });
+
+      return res.json({
+        success: true,
+        entered: !!entry,
+        entry: entry || null,
+      });
+    } catch (error) {
+      console.error("Get my entry error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Failed to check draw entry",
+      });
+    }
+  }
+);
+
+// ==========================================
 // PUBLIC - LATEST PUBLISHED DRAW
 // GET /api/draws/latest
 // ==========================================
@@ -966,6 +1061,7 @@ router.get(
     }
   }
 );
+
 
 // ==========================================
 // USER - ENTER DRAW

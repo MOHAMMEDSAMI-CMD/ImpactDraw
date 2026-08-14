@@ -1,26 +1,21 @@
 import express from "express";
+
 import Wallet from "../models/Wallet.js";
 import Withdrawal from "../models/Withdrawal.js";
 import Transaction from "../models/Transaction.js";
+
 import { requireAuth } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// ==========================================
+// =====================================================
 // CREATE WITHDRAWAL
 // POST /api/withdrawals
-// ==========================================
+// =====================================================
 
 router.post("/", requireAuth, async (req, res) => {
   try {
-    const userId = req.user?._id || req.user?.id;
-
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: "User not authenticated",
-      });
-    }
+    const userId = req.user._id;
 
     const {
       amount,
@@ -31,22 +26,33 @@ router.post("/", requireAuth, async (req, res) => {
       ifscCode,
     } = req.body;
 
-    // ------------------------------
-    // Validate amount
-    // ------------------------------
+    const withdrawalAmount = Number(amount);
 
-    if (!amount || Number(amount) <= 0) {
+    // =========================
+    // AMOUNT
+    // =========================
+
+    if (
+      !Number.isFinite(withdrawalAmount) ||
+      withdrawalAmount <= 0
+    ) {
       return res.status(400).json({
         success: false,
         message: "Invalid withdrawal amount",
       });
     }
 
-    const withdrawalAmount = Number(amount);
+    if (withdrawalAmount < 50) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Minimum withdrawal amount is ₹50",
+      });
+    }
 
-    // ------------------------------
-    // Validate method
-    // ------------------------------
+    // =========================
+    // METHOD
+    // =========================
 
     if (!["upi", "bank"].includes(method)) {
       return res.status(400).json({
@@ -55,51 +61,74 @@ router.post("/", requireAuth, async (req, res) => {
       });
     }
 
-    // ------------------------------
-    // Validate UPI
-    // ------------------------------
+    // =========================
+    // UPI
+    // =========================
 
-    if (method === "upi" && !upiId) {
+    if (method === "upi" && !upiId?.trim()) {
       return res.status(400).json({
         success: false,
         message: "UPI ID is required",
       });
     }
 
-    // ------------------------------
-    // Validate bank details
-    // ------------------------------
+    // =========================
+    // BANK
+    // =========================
 
     if (
       method === "bank" &&
-      (!accountHolderName ||
-        !accountNumber ||
-        !ifscCode)
+      (
+        !accountHolderName?.trim() ||
+        !accountNumber?.trim() ||
+        !ifscCode?.trim()
+      )
     ) {
       return res.status(400).json({
         success: false,
-        message: "Complete bank details are required",
+        message:
+          "Complete bank details are required",
       });
     }
 
-    // ------------------------------
-    // Get wallet
-    // ------------------------------
+    // =========================
+    // EXISTING REQUEST
+    // =========================
 
-    const wallet = await Wallet.findOne({
+    const existingWithdrawal =
+      await Withdrawal.findOne({
+        user: userId,
+        status: {
+          $in: ["pending", "approved"],
+        },
+      });
+
+    if (existingWithdrawal) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "You already have a pending withdrawal request",
+      });
+    }
+
+    // =========================
+    // WALLET
+    // =========================
+
+    let wallet = await Wallet.findOne({
       user: userId,
     });
 
     if (!wallet) {
-      return res.status(404).json({
-        success: false,
-        message: "Wallet not found",
+      wallet = await Wallet.create({
+        user: userId,
+        balance: 0,
       });
     }
 
-    // ------------------------------
-    // Check balance
-    // ------------------------------
+    // =========================
+    // BALANCE
+    // =========================
 
     if (wallet.balance < withdrawalAmount) {
       return res.status(400).json({
@@ -108,62 +137,85 @@ router.post("/", requireAuth, async (req, res) => {
       });
     }
 
-    // ------------------------------
-    // Deduct amount
-    // ------------------------------
+    // =========================
+    // DEDUCT
+    // =========================
 
     wallet.balance -= withdrawalAmount;
 
     await wallet.save();
 
-    // ------------------------------
-    // Create withdrawal
-    // ------------------------------
+    // =========================
+    // CREATE WITHDRAWAL
+    // =========================
 
-    const withdrawal = await Withdrawal.create({
-      user: userId,
-      amount: withdrawalAmount,
-      method,
-      upiId: method === "upi" ? upiId : "",
-      accountHolderName:
-        method === "bank"
-          ? accountHolderName
-          : "",
-      accountNumber:
-        method === "bank"
-          ? accountNumber
-          : "",
-      ifscCode:
-        method === "bank"
-          ? ifscCode
-          : "",
-      status: "pending",
-    });
+    const withdrawal =
+      await Withdrawal.create({
+        user: userId,
 
-    // ------------------------------
-    // Create transaction
-    // ------------------------------
+        amount: withdrawalAmount,
+
+        method,
+
+        upiId:
+          method === "upi"
+            ? upiId.trim()
+            : "",
+
+        accountHolderName:
+          method === "bank"
+            ? accountHolderName.trim()
+            : "",
+
+        accountNumber:
+          method === "bank"
+            ? accountNumber.trim()
+            : "",
+
+        ifscCode:
+          method === "bank"
+            ? ifscCode.trim().toUpperCase()
+            : "",
+
+        status: "pending",
+      });
+
+    // =========================
+    // TRANSACTION
+    // =========================
 
     const transaction =
       await Transaction.create({
         user: userId,
+
         type: "debit",
+
         amount: withdrawalAmount,
+
         description: "Withdrawal request",
+
         status: "pending",
+
         reference: withdrawal._id,
+
+        referenceType: "Withdrawal",
       });
 
     return res.status(201).json({
       success: true,
-      message: "Withdrawal request submitted",
+
+      message:
+        "Withdrawal request submitted",
+
       withdrawal,
+
       transaction,
+
       walletBalance: wallet.balance,
     });
   } catch (error) {
     console.error(
-      "Create withdrawal error:",
+      "CREATE WITHDRAWAL ERROR:",
       error
     );
 
@@ -174,21 +226,14 @@ router.post("/", requireAuth, async (req, res) => {
   }
 });
 
-// ==========================================
+// =====================================================
 // GET MY WITHDRAWALS
 // GET /api/withdrawals
-// ==========================================
+// =====================================================
 
 router.get("/", requireAuth, async (req, res) => {
   try {
-    const userId = req.user?._id || req.user?.id;
-
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: "User not authenticated",
-      });
-    }
+    const userId = req.user._id;
 
     const withdrawals =
       await Withdrawal.find({
@@ -197,13 +242,13 @@ router.get("/", requireAuth, async (req, res) => {
         createdAt: -1,
       });
 
-    return res.json({
+    return res.status(200).json({
       success: true,
       withdrawals,
     });
   } catch (error) {
     console.error(
-      "Get withdrawals error:",
+      "GET WITHDRAWALS ERROR:",
       error
     );
 

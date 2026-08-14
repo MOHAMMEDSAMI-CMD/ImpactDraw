@@ -7,7 +7,7 @@ import {
   Users,
   IndianRupee,
   Clock,
-  XCircle,
+  Lock,
 } from "lucide-react";
 
 import api from "../../services/api";
@@ -19,22 +19,25 @@ const AdminDraws = () => {
   const [simulation, setSimulation] = useState(null);
 
   const [loading, setLoading] = useState(true);
+  const [opening, setOpening] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   // ==========================================
   // LOAD CURRENT DRAW
-  // GET /api/admin/draws/current
   // ==========================================
 
   const loadDraw = async () => {
     try {
-      const { data } = await api.get("/admin/draws/current");
+      const { data } = await api.get(
+        "/admin/draws/current"
+      );
 
       if (!data.success) {
         throw new Error(
-          data.message || "Failed to load current draw"
+          data.message ||
+            "Failed to load current draw"
         );
       }
 
@@ -45,7 +48,10 @@ const AdminDraws = () => {
         setSimulation(null);
       }
     } catch (error) {
-      console.error("Load draw error:", error);
+      console.error(
+        "Load draw error:",
+        error
+      );
 
       alert(
         error.response?.data?.message ||
@@ -76,11 +82,82 @@ const AdminDraws = () => {
   };
 
   // ==========================================
+  // OPEN ENTRIES
+  // POST /api/admin/draws/open
+  // ==========================================
+
+  const openDraw = async () => {
+    if (!draw?._id) {
+      alert("Draw ID is missing.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Open this draw for user entries?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setOpening(true);
+
+      const { data } = await api.post(
+        "/admin/draws/open",
+        {
+          drawId: draw._id,
+        }
+      );
+
+      if (!data.success) {
+        throw new Error(
+          data.message ||
+            "Failed to open draw"
+        );
+      }
+
+      alert(
+        data.message ||
+          "Draw is now open for entries."
+      );
+
+      setSimulation(null);
+
+      await loadDraw();
+    } catch (error) {
+      console.error(
+        "Open draw error:",
+        error
+      );
+
+      alert(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to open draw"
+      );
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  // ==========================================
   // SIMULATE DRAW
-  // POST /api/admin/draws/simulate
   // ==========================================
 
   const simulateDraw = async () => {
+    if (!draw) {
+      alert("No current draw available.");
+      return;
+    }
+
+    if (draw.status !== "open") {
+      alert(
+        "Please open the draw for entries first."
+      );
+      return;
+    }
+
     try {
       setSimulating(true);
       setSimulation(null);
@@ -94,13 +171,19 @@ const AdminDraws = () => {
 
       if (!data.success) {
         throw new Error(
-          data.message || "Simulation failed"
+          data.message ||
+            "Simulation failed"
         );
       }
 
       setSimulation(data);
+
+      await loadDraw();
     } catch (error) {
-      console.error("Simulation error:", error);
+      console.error(
+        "Simulation error:",
+        error
+      );
 
       alert(
         error.response?.data?.message ||
@@ -114,12 +197,13 @@ const AdminDraws = () => {
 
   // ==========================================
   // PUBLISH DRAW
-  // POST /api/admin/draws/publish
   // ==========================================
 
   const publishDraw = async () => {
     if (!simulation) {
-      alert("Please simulate the draw first.");
+      alert(
+        "Please simulate the draw first."
+      );
       return;
     }
 
@@ -129,10 +213,14 @@ const AdminDraws = () => {
     }
 
     if (
-      !Array.isArray(simulation.numbers) ||
+      !Array.isArray(
+        simulation.numbers
+      ) ||
       simulation.numbers.length !== 5
     ) {
-      alert("Exactly 5 winning numbers are required.");
+      alert(
+        "Exactly 5 winning numbers are required."
+      );
       return;
     }
 
@@ -152,25 +240,25 @@ const AdminDraws = () => {
         {
           drawId: simulation.drawId,
           numbers: simulation.numbers,
-          mode: simulation.mode || mode,
+          mode:
+            simulation.mode || mode,
         }
       );
 
       if (!data.success) {
         throw new Error(
-          data.message || "Failed to publish draw"
+          data.message ||
+            "Failed to publish draw"
         );
       }
 
       alert(
         data.message ||
-          "Draw published successfully"
+          "Draw published successfully."
       );
 
-      // Simulation remove
       setSimulation(null);
 
-      // Current draw reload
       await loadDraw();
     } catch (error) {
       console.error(
@@ -193,12 +281,11 @@ const AdminDraws = () => {
   // ==========================================
 
   const formatMoney = (amount = 0) => {
-    return `₹${Number(amount || 0).toLocaleString(
-      "en-IN",
-      {
-        maximumFractionDigits: 2,
-      }
-    )}`;
+    return `₹${Number(
+      amount || 0
+    ).toLocaleString("en-IN", {
+      maximumFractionDigits: 2,
+    })}`;
   };
 
   // ==========================================
@@ -226,9 +313,9 @@ const AdminDraws = () => {
 
     if (status === "open") {
       return (
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-50 text-yellow-700 text-sm font-bold">
-          <Clock size={14} />
-          Open
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-50 text-green-700 text-sm font-bold">
+          <CheckCircle size={14} />
+          Open for Entries
         </span>
       );
     }
@@ -272,7 +359,8 @@ const AdminDraws = () => {
           </h1>
 
           <p className="text-gray-500 mt-2">
-            Simulate, manage and publish monthly draws.
+            Manage entries, simulate and publish
+            monthly draws.
           </p>
         </div>
 
@@ -316,18 +404,22 @@ const AdminDraws = () => {
               </p>
 
               <h2 className="text-3xl font-black text-[#173f2b] mt-2">
-                {draw?.month || "Current Draw"}{" "}
+                {draw?.month ||
+                  "Current Draw"}{" "}
                 {draw?.year || ""}
               </h2>
 
               <div className="flex flex-wrap gap-3 mt-4">
 
-                {getStatusBadge(draw?.status)}
+                {getStatusBadge(
+                  draw?.status
+                )}
 
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-50 text-green-700 text-sm font-bold">
                   <Users size={14} />
 
-                  {draw?.eligibleSubscribers || 0}{" "}
+                  {draw?.eligibleSubscribers ||
+                    0}{" "}
                   eligible subscribers
                 </span>
 
@@ -344,19 +436,100 @@ const AdminDraws = () => {
               </p>
 
               <p className="text-3xl font-black text-[#173f2b] mt-1">
-                {formatMoney(draw?.prizePool)}
+                {formatMoney(
+                  draw?.prizePool
+                )}
               </p>
 
               <p className="text-sm text-gray-500 mt-2">
                 Jackpot:{" "}
                 <span className="font-bold text-[#173f2b]">
-                  {formatMoney(draw?.jackpot)}
+                  {formatMoney(
+                    draw?.jackpot
+                  )}
                 </span>
               </p>
 
             </div>
 
           </div>
+
+          {/* ======================================
+              OPEN DRAW
+          ====================================== */}
+
+          {draw &&
+            draw.status !== "open" &&
+            draw.status !== "published" &&
+            draw.status !== "simulated" && (
+
+              <div className="mt-7 pt-7 border-t">
+
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+
+                  <div>
+                    <p className="font-bold text-[#173f2b]">
+                      Ready to accept user entries?
+                    </p>
+
+                    <p className="text-sm text-gray-500 mt-1">
+                      Open the draw so users can
+                      select and submit their 5 numbers.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={openDraw}
+                    disabled={opening}
+                    className="btn-primary inline-flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <CheckCircle size={17} />
+
+                    {opening
+                      ? "Opening..."
+                      : "Open Entries"}
+                  </button>
+
+                </div>
+
+              </div>
+            )}
+
+          {/* ======================================
+              OPEN STATUS MESSAGE
+          ====================================== */}
+
+          {draw?.status === "open" && (
+            <div className="mt-7 pt-7 border-t">
+
+              <div className="rounded-xl bg-green-50 border border-green-200 p-5">
+
+                <div className="flex items-start gap-3">
+
+                  <CheckCircle
+                    size={21}
+                    className="text-green-600 mt-0.5"
+                  />
+
+                  <div>
+
+                    <p className="font-bold text-green-900">
+                      Entries are open
+                    </p>
+
+                    <p className="text-sm text-green-800 mt-1">
+                      Users can now select 5 numbers
+                      and enter this monthly draw.
+                    </p>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+          )}
 
           {/* ======================================
               PUBLISHED NUMBERS
@@ -401,7 +574,9 @@ const AdminDraws = () => {
                     Published on{" "}
                     {new Date(
                       draw.publishedAt
-                    ).toLocaleString("en-IN")}
+                    ).toLocaleString(
+                      "en-IN"
+                    )}
                   </p>
                 )}
 
@@ -416,7 +591,7 @@ const AdminDraws = () => {
           SIMULATION
       ======================================== */}
 
-      {draw?.status !== "published" && (
+      {draw?.status === "open" && (
 
         <section className="mt-8">
 
@@ -445,13 +620,12 @@ const AdminDraws = () => {
             </div>
 
             <p className="text-gray-500 mt-3">
-              Select a mode and simulate the current
-              monthly draw before publishing it.
+              First allow users to enter the draw.
+              After entries close, simulate the
+              winning numbers.
             </p>
 
-            {/* ==================================
-                DRAW MODE
-            ================================== */}
+            {/* MODE */}
 
             <div className="mt-7">
 
@@ -518,7 +692,8 @@ const AdminDraws = () => {
                       Algorithmic
                     </p>
 
-                    {mode === "algorithmic" && (
+                    {mode ===
+                      "algorithmic" && (
                       <CheckCircle
                         size={20}
                         className="text-[#173f2b]"
@@ -528,7 +703,8 @@ const AdminDraws = () => {
                   </div>
 
                   <p className="text-sm text-gray-500 mt-1">
-                    Use score frequency to generate numbers.
+                    Use score frequency to generate
+                    numbers.
                   </p>
 
                 </button>
@@ -537,13 +713,14 @@ const AdminDraws = () => {
 
             </div>
 
-            {/* ==================================
-                SIMULATE BUTTON
-            ================================== */}
+            {/* SIMULATE */}
 
             <button
               onClick={simulateDraw}
-              disabled={simulating}
+              disabled={
+                simulating ||
+                draw?.status !== "open"
+              }
               className="btn-primary mt-6 inline-flex items-center gap-2 disabled:opacity-50"
             >
 
@@ -565,7 +742,6 @@ const AdminDraws = () => {
           </div>
 
         </section>
-
       )}
 
       {/* ========================================
@@ -578,7 +754,7 @@ const AdminDraws = () => {
 
           <div className="card p-7">
 
-            {/* RESULT HEADER */}
+            {/* HEADER */}
 
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
 
@@ -604,9 +780,7 @@ const AdminDraws = () => {
 
             </div>
 
-            {/* ==================================
-                WINNING NUMBERS
-            ================================== */}
+            {/* WINNING NUMBERS */}
 
             <div className="mt-7">
 
@@ -631,9 +805,7 @@ const AdminDraws = () => {
 
             </div>
 
-            {/* ==================================
-                BASIC STATS
-            ================================== */}
+            {/* BASIC STATS */}
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
 
@@ -717,9 +889,7 @@ const AdminDraws = () => {
 
             </div>
 
-            {/* ==================================
-                MATCH RESULTS
-            ================================== */}
+            {/* MATCH RESULTS */}
 
             <div className="mt-8">
 
@@ -729,7 +899,7 @@ const AdminDraws = () => {
 
               <div className="grid md:grid-cols-3 gap-4 mt-4">
 
-                {/* 5 NUMBERS */}
+                {/* FIVE */}
 
                 <div className="rounded-xl border border-gray-200 p-5">
 
@@ -787,7 +957,7 @@ const AdminDraws = () => {
 
                 </div>
 
-                {/* 4 NUMBERS */}
+                {/* FOUR */}
 
                 <div className="rounded-xl border border-gray-200 p-5">
 
@@ -845,7 +1015,7 @@ const AdminDraws = () => {
 
                 </div>
 
-                {/* 3 NUMBERS */}
+                {/* THREE */}
 
                 <div className="rounded-xl border border-gray-200 p-5">
 
@@ -907,9 +1077,7 @@ const AdminDraws = () => {
 
             </div>
 
-            {/* ==================================
-                PUBLISH SECTION
-            ================================== */}
+            {/* PUBLISH */}
 
             <div className="mt-8 pt-7 border-t">
 
@@ -950,11 +1118,10 @@ const AdminDraws = () => {
           </div>
 
         </section>
-
       )}
 
       {/* ========================================
-          PUBLISHED DRAW SUMMARY
+          PUBLISHED DRAW
       ======================================== */}
 
       {draw?.status === "published" && (
@@ -976,68 +1143,10 @@ const AdminDraws = () => {
                 </h2>
 
                 <p className="text-gray-500 mt-1">
-                  The August 2026 draw has been
-                  published and winner records have
-                  been created.
-                </p>
-
-              </div>
-
-            </div>
-
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-7">
-
-              <div className="rounded-xl bg-gray-50 p-5">
-
-                <p className="text-sm text-gray-500">
-                  Status
-                </p>
-
-                <div className="mt-2">
-                  {getStatusBadge(
-                    draw.status
-                  )}
-                </div>
-
-              </div>
-
-              <div className="rounded-xl bg-gray-50 p-5">
-
-                <p className="text-sm text-gray-500">
-                  Eligible Subscribers
-                </p>
-
-                <p className="text-2xl font-black text-[#173f2b] mt-1">
-                  {draw.eligibleSubscribers ||
-                    0}
-                </p>
-
-              </div>
-
-              <div className="rounded-xl bg-gray-50 p-5">
-
-                <p className="text-sm text-gray-500">
-                  Prize Pool
-                </p>
-
-                <p className="text-2xl font-black text-[#173f2b] mt-1">
-                  {formatMoney(
-                    draw.prizePool
-                  )}
-                </p>
-
-              </div>
-
-              <div className="rounded-xl bg-gray-50 p-5">
-
-                <p className="text-sm text-gray-500">
-                  Jackpot
-                </p>
-
-                <p className="text-2xl font-black text-[#173f2b] mt-1">
-                  {formatMoney(
-                    draw.jackpot
-                  )}
+                  The {draw.month}{" "}
+                  {draw.year} draw has been
+                  published and winner records
+                  have been created.
                 </p>
 
               </div>
@@ -1047,7 +1156,6 @@ const AdminDraws = () => {
           </div>
 
         </section>
-
       )}
 
       {/* ========================================
@@ -1055,8 +1163,6 @@ const AdminDraws = () => {
       ======================================== */}
 
       <section className="grid md:grid-cols-3 gap-5 mt-8">
-
-        {/* ELIGIBLE */}
 
         <div className="card p-6">
 
@@ -1074,8 +1180,6 @@ const AdminDraws = () => {
           </h3>
 
         </div>
-
-        {/* PRIZE POOL */}
 
         <div className="card p-6">
 
@@ -1095,8 +1199,6 @@ const AdminDraws = () => {
           </h3>
 
         </div>
-
-        {/* JACKPOT */}
 
         <div className="card p-6">
 
@@ -1118,43 +1220,6 @@ const AdminDraws = () => {
         </div>
 
       </section>
-
-      {/* ========================================
-          HELP / WARNING
-      ======================================== */}
-
-      {draw?.status === "published" && (
-        <section className="mt-8">
-
-          <div className="rounded-xl bg-blue-50 border border-blue-100 p-5">
-
-            <div className="flex items-start gap-3">
-
-              <CheckCircle
-                size={20}
-                className="text-blue-600 mt-0.5 shrink-0"
-              />
-
-              <div>
-
-                <p className="font-bold text-blue-900">
-                  What happens next?
-                </p>
-
-                <p className="text-sm text-blue-800 mt-1">
-                  Go to the Winners section to verify
-                  winners and process their prize
-                  payouts.
-                </p>
-
-              </div>
-
-            </div>
-
-          </div>
-
-        </section>
-      )}
 
     </div>
   );

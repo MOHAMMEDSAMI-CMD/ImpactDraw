@@ -200,7 +200,7 @@ router.patch(
 // =====================================================
 
 router.patch(
-  "/:id/pay",
+  "/:id/payout",
   requireAuth,
   requireAdmin,
   async (req, res) => {
